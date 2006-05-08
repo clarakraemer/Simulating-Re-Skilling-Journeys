@@ -1,7 +1,7 @@
 import matplotlib as mpl
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, BoundaryNorm
 
 
 def move_legend_to_right(ax, scale=0.8):
@@ -97,6 +97,58 @@ def plot_stackedbar_p(df, labels, colors, title, subtitle):
     ax.xaxis.grid(color="gray", linestyle="dashed")
 
     plt.show()
+
+def thresholded_discrete_cmap_and_norm(
+    *,
+    base_colors,
+    bounds,
+    over_color="black",
+    under_color=None,
+):
+    """
+    Returns (cmap, norm, ticks) for a *discrete* choropleth with explicit bin edges.
+
+    - base_colors: list of colors, one per bin (len(base_colors) must equal len(bounds)-1)
+    - bounds: list/array of bin edges, e.g. [0, 1, 2, 3, 4, 5, 6, 10]
+        This enforces:
+          [0,1) -> color 0  (red)
+          [1,2) -> color 1
+          ...
+          [6,10] -> last color
+    - Values > bounds[-1] use cmap.set_over(over_color)
+    - Values < bounds[0] use cmap.set_under(under_color) if provided
+
+    IMPORTANT:
+      - values == 1 fall into the [1,2) bin (NOT red)
+      - values < 1 fall into [0,1) (red)
+    """
+    bounds = np.asarray(bounds, dtype=float)
+
+    if bounds.ndim != 1 or len(bounds) < 2:
+        raise ValueError("bounds must be a 1D array with at least 2 elements.")
+
+    n_bins = len(bounds) - 1
+    if len(base_colors) != n_bins:
+        raise ValueError(
+            f"Need exactly {n_bins} colors for {n_bins} bins (len(bounds)-1). "
+            f"Got {len(base_colors)} colors."
+        )
+
+    # ensure strictly increasing edges
+    if not np.all(np.diff(bounds) > 0):
+        raise ValueError("bounds must be strictly increasing.")
+
+    cmap = mpl.colors.ListedColormap(list(base_colors), N=n_bins)
+    if over_color is not None:
+        cmap.set_over(over_color)
+    if under_color is not None:
+        cmap.set_under(under_color)
+
+    norm = BoundaryNorm(bounds, ncolors=n_bins, clip=False)
+
+    # ticks: by default show all integer cutpoints inside the bounds
+    ticks = bounds[:-1]
+    return cmap, norm, ticks
 
 
 def discrete_cmap_with_manual_colors(

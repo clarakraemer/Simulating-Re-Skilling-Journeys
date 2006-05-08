@@ -317,47 +317,12 @@ class ReskillingPathways:
                 "annual_earnings": "mean",
             }
 
-            # OLD
-            #isco_avg = (
-            #    lfs_country_subset
-            #    .groupby(["ISCO", "ISCO08_3D_label"])
-            #    .aggregate(agg_dict)
-            #    .reset_index()
-            #)
-
-            # NEW: resolves panda warnings
-            isco_avg = (
+            isco_avg = ( # Resolves panda warnings
                 lfs_country_subset
                 .groupby(["ISCO", "ISCO08_3D_label"], as_index=False)
                 .agg(agg_dict)
             )
 
-            # define the category of an ISCO 3D group as the one with the
-            # highest fraction (of ESCO occupations)
-            # OLD
-            # isco_avg["category_sl"] = isco_avg[
-            #    ["share_green", "share_brown_sl", "share_neutral_sl"]
-            # ].idxmax(axis=1)
-            # isco_avg["category_slt"] = isco_avg[
-            #    ["share_green", "share_brown_slt", "share_neutral_slt"]
-            # ].idxmax(axis=1)
-
-            # isco_avg = isco_avg.replace(
-            #    to_replace={
-            #        "category_sl": {
-            #            "share_green": "green",
-            #            "share_brown_sl": "brown",
-            #            "share_neutral_sl": "neutral",
-            #        },
-            #        "category_slt": {
-            #            "share_green": "green",
-            #            "share_brown_slt": "brown",
-            #            "share_neutral_slt": "neutral",
-            #        },
-            #    }
-            # )
-
-            # NEW
             cat_cols = [
                 "share_low_carbon",
                 "share_viable_to_decarbonize",
@@ -376,7 +341,6 @@ class ReskillingPathways:
             )
 
             # join
-            #print("DEBUG isco_avg.columns:", isco_avg.columns.tolist())
             occs_at_level["code"] = occs_at_level["code"].astype(str)
             isco_avg["ISCO"] = isco_avg["ISCO"].astype(str)
 
@@ -401,8 +365,6 @@ class ReskillingPathways:
         Note: first aggregating the occupation-skills matrix at a specific level and
          then calculating the co-occurrence yields the same result.
 
-        Todo: not sure if the above holds true for the shortage/excess metrics.
-
         Parameters
         ----------
         level : str
@@ -423,7 +385,6 @@ class ReskillingPathways:
         if upskilling_ids is None:
             df_occ_sim = self.df_occ_sim
         else:
-            # Note: this is too slow. changed to directly work on the 3 digit matrix.
             df_occ_sim = occupation_distance.occ_sim_matrix_by_levels(
                 occ_skills_mat=occ_skills_mat,
                 osm_version=self.osm_version,
@@ -434,7 +395,7 @@ class ReskillingPathways:
         df_sim_matrix_agg = (
             df_occ_sim.groupby(level=lvl_code)
             .aggregate(agg_func)
-            .T #NEW, instead of axis=0 above and axis=1 below
+            .T
             .groupby(level=lvl_code)
             .aggregate(agg_func)
         )
@@ -803,7 +764,6 @@ class ReskillingPathways:
             level="isco_3_digit", lfs_country_subset=lfs_data_country
         )
 
-        # NEW: required to pick target occs based on means not on category
         means = {
             "share_low_carbon": isco_grp_avg["share_low_carbon"].mean(),
             "share_viable_to_decarbonize": isco_grp_avg["share_viable_to_decarbonize"].mean(),
@@ -811,24 +771,7 @@ class ReskillingPathways:
             "share_neutral": isco_grp_avg["share_neutral"].mean(),
         }
 
-        # OLD Job pools
-        # 1) select all observations which occupations are browner than the
-        # across-occupation average of the share_brown_slt variable
-        #elif scenario == "brown_techchange":
-        #    transition_pool = lfs_data_country.loc[
-        #        lfs_data_country["share_brown_slt"]
-        #        > isco_grp_avg["share_brown_slt"].mean()
-        #    ]
-
-        # 2) select all observations which occupations are browner than the
-        # across-occupation average of the share_brown_sl variable
-        #elif scenario == "brown":
-        #    transition_pool = lfs_data_country.loc[
-        #        lfs_data_country["share_brown_sl"]
-        #        > isco_grp_avg["share_brown_sl"].mean()
-        #    ]
-
-        # NEW job pools
+        # job pools
         # 1) at‐risk: unviable‐to‐decarbonize above average
         if scenario == "at_risk":
             transition_pool = lfs_data_country.loc[
@@ -857,7 +800,7 @@ class ReskillingPathways:
         else:
             raise NotImplementedError()
 
-        #NEW: Combine COEFFY_share_shortage
+        # Combine COEFFY_share_shortage
         if "COEFFY_share_neutral" in lfs_data_country.columns and "COEFFY_share_high_carbon" in lfs_data_country.columns:
             # compute on the transition_pool slice (avoid touching the original lfs_data_country)
             transition_pool["COEFFY_share_shortage"] = (
@@ -869,7 +812,6 @@ class ReskillingPathways:
 
         return transition_pool
 
-    # REMOVED absorption logic in here
     def jobs_by_country_and_region(self):
         """
        Calculate the number of jobs per country, region and occupation.
@@ -889,24 +831,6 @@ class ReskillingPathways:
         jobs_by_regions_countries["COUNTRYW"] = jobs_by_regions_countries[
             "NUTS_ID"
         ].str.slice(0, 2)
-
-        # REMOVED: create categories of aggregate target jobs for SL and SLT versions
-    #    jobs_by_regions_countries["COEFFY_share_target_sl"] = (
-    #        jobs_by_regions_countries["COEFFY_share_green"]
-    #        + jobs_by_regions_countries["COEFFY_share_neutral_sl"]
-    #    )
-    #    jobs_by_regions_countries["COEFFY_share_target_slt"] = (
-    #        jobs_by_regions_countries["COEFFY_share_green"]
-    #        + jobs_by_regions_countries["COEFFY_share_neutral_slt"]
-    #    )
-
-        # REMOVED asorption constraint: ceil all numeric results
-        #numeric_cols = jobs_by_regions_countries.select_dtypes(
-        #    include=[np.number]
-        #).columns.values
-        #jobs_by_regions_countries[numeric_cols] = jobs_by_regions_countries[
-        #   numeric_cols
-        #].apply(np.ceil, axis=1)
 
         return jobs_by_regions_countries
 
@@ -961,14 +885,7 @@ class ReskillingPathways:
         if countries is None:
             countries = ["DE"]
 
-        # OLD: We always need it, even for step = 0
-        #if reskilling is None:
-        #    # read sim matrix
-        #    similarity_matrix = self.sim_matrix_at_level(
-        #        level=level, mask_diagonal=mask_diagonal
-        #    ).values
-
-        # NEW: Always load baseline similarity matrix (for step=0 and beyond)
+        # Always load baseline similarity matrix (for step=0 and beyond)
         similarity_matrix = self.sim_matrix_at_level(
             level=level, mask_diagonal=mask_diagonal
         ).values
@@ -1012,10 +929,8 @@ class ReskillingPathways:
                 df_transition_pool = self.define_transition_pool(
                     scenario=scenario, country=country
                 )
-                print(f"[DEBUG] df_transition_pool NUTS_IDs for {country}:",
-                      df_transition_pool["NUTS_ID"].astype(str).unique().tolist())
 
-                # NEW: Esnure coeffy is numeric only, no ceil in simulate (ceil is only used in simulate_regional)
+                # Ensure coeffy is numeric only, no ceil in simulate (ceil is only used in simulate_regional)
                 coeffy = coeffy_weight  # e.g. "COEFFY_share_unviable_to_decarbonize"
                 if coeffy not in df_transition_pool.columns:
                     df_transition_pool[coeffy] = 0
@@ -1024,7 +939,7 @@ class ReskillingPathways:
                     df_transition_pool.loc[:, coeffy], errors="coerce"
                 ).fillna(0.0)
 
-                # NEW: fail early if there are negative values (data bug)
+                # Fail early if there are negative values (data bug)
                 if (df_transition_pool[coeffy] < 0).any():
                     sample_bad = df_transition_pool.loc[
                         df_transition_pool[coeffy] < 0, ["COUNTRYW", "NACE2_1D", coeffy]].head(10)
@@ -1032,7 +947,6 @@ class ReskillingPathways:
                         f"Negative values found in {coeffy} for {country} in simulate(); sample:\n{sample_bad}")
 
                 # impute missing region of work with region of home & update NUTS codes
-                # TODO: move to preprocessing of LFS data
                 df_transition_pool.loc[
                     df_transition_pool["REGION_2DW"].isna(), "NUTS_ID"
                 ] = df_transition_pool.loc[
@@ -1054,10 +968,7 @@ class ReskillingPathways:
                     ],
                 )
 
-                #print(f"[DEBUG] df_occs codes for {country}:",
-                #      df_occs["code"].astype(str).unique().tolist())
-
-                # NEW: country-level job availability (reuse regional helper)
+                # Country-level job availability (reuse regional helper)
                 jobs_country = (
                     self.jobs_by_country_and_region()
                     .query("COUNTRYW == @country")
@@ -1065,7 +976,7 @@ class ReskillingPathways:
                 )
                 available_occs = jobs_country[jobs_country > 0].index.astype(str)
 
-                # NEW: pre-compute country mean shares (same cols as simulate_regional)
+                # Pre-compute country mean shares (same cols as simulate_regional)
                 share_cols = [
                     "share_viable_to_decarbonize",
                     "share_unviable_to_decarbonize",
@@ -1076,17 +987,10 @@ class ReskillingPathways:
                 country_share_means = {c: df_occs[c].mean() for c in share_cols}
 
                 # populate transition pool dict
-                # todo: do i need this snippet?
                 transition_pool_dict = {}
                 for i, s in df_transition_pool.iterrows():
                     transition_pool_dict[s.ISCO08_3D_label] = s.ISCO08_3D
 
-                # save numbers by source industry
-                # todo: does not work for every country, overwrites results in each
-                #  iteration as of now
-                # df_transition_pool.groupby("NACE1D_label").sum().iloc[:, :4].to_csv(
-                #     os.path.join(target_dir, "source_transition_pool.csv")
-                # )
 
                 # ---------------------------------------------------------------------
                 # Worker-level transition simulation
@@ -1100,9 +1004,7 @@ class ReskillingPathways:
                         )
                     )
 
-                #occ_skills_mat = self.occ_skills_mat_3d.copy() #OLD
-
-                # NEW: one clean baseline per worker similar to simulate_regional
+                # One clean baseline per worker similar to simulate_regional
                 rng = np.random.RandomState(42)
                 df_transition_pool_shuffled = df_transition_pool.sample(frac=1, random_state=rng).reset_index(drop=True)
 
@@ -1110,10 +1012,10 @@ class ReskillingPathways:
                     occ_skills_mat = self.occ_skills_mat_3d.copy()
                     added_skill = None
 
-                    # NEW: local sim matrix (keeps global baseline untouched)
+                    # local sim matrix (keeps global baseline untouched)
                     sim_mat = similarity_matrix
 
-                    # --- then loop cumulatively through reskilling steps ---
+                    # loop cumulatively through reskilling steps
                     for step in range(0, reskilling_journey_length + 1):
                         search_obs["reskilling_step"] = step
                         search_label = search_obs.ISCO08_3D_label
@@ -1121,7 +1023,7 @@ class ReskillingPathways:
                             df_occs["preferredLabel"] == search_label
                             ].index.values[0]
 
-                        # NEW: now perform upskilling for this worker & step
+                        # perform upskilling for this worker & step
                         if step > 0 and reskilling is not None:
                             sim_mat, occ_skills_mat, added_skill = self.reskill( #NEW: sim_mat
                                 occ_skills_mat=occ_skills_mat,
@@ -1132,7 +1034,7 @@ class ReskillingPathways:
                                 skill_rank=step,
                             )
 
-                        # NEW: stamp onto this search_obs row
+                        # stamp onto this search_obs row
                         if reskilling == "optimal" and added_skill is not None:
                             search_obs[f"added_skill_idx_step_{step}"] = added_skill
                             sel = self.df_optimal_upskilling_per_occ[
@@ -1154,7 +1056,7 @@ class ReskillingPathways:
                             target_occs["similarity"] > q_highly_viable
                         ]
 
-                        # NEW: drop occupations not present in this country
+                        # drop occupations not present in this country
                         target_occs_filtered = target_occs_filtered.loc[
                             target_occs_filtered["code"].astype(str).isin(available_occs)
                         ]
@@ -1162,8 +1064,7 @@ class ReskillingPathways:
                             target_occs_filtered_hv["code"].astype(str).isin(available_occs)
                         ]
 
-                        # NEW: apply the same share‑filter map from simulate_regional
-                        #    (you may move this dict to class level for reuse)
+                        # apply the same share‑filter map from simulate_regional
                         share_filter_by_scenario = {
                             "at_risk": ["share_unviable_to_decarbonize", "share_neutral", "share_low_carbon"],
                             "high_carbon": ["share_neutral", "share_low_carbon"],
@@ -1248,7 +1149,7 @@ class ReskillingPathways:
                             # transition_target_code not used in simulate but present in simulate_regional; include for parity
                             search_obs[f"transition_target_code_step_{step}"] = target["code"].values[0]
 
-                            # target category (use same logic as before) and store into step-suffixed
+                            # target category (same logic as before)
                             share_cols = [
                                 "share_low_carbon",
                                 "share_viable_to_decarbonize",
@@ -1420,13 +1321,11 @@ class ReskillingPathways:
                                 search_obs[f"transition_target_code_step_{step}"] = None
                                 search_obs[f"target_category_step_{step}"] = None
 
-                        #transition_number_data.append(search_obs) #OLD
-                        transition_number_data.append(search_obs.to_dict()) #NEW
+                        transition_number_data.append(search_obs.to_dict())
 
                 # to df
                 if len(transition_number_data) > 0:
-                    #df_transition_numbers = pd.concat(transition_number_data, axis=1).T #OLD
-                    df_transition_numbers = pd.DataFrame(transition_number_data) #NEW
+                    df_transition_numbers = pd.DataFrame(transition_number_data)
                     df_transition_numbers = df_transition_numbers.infer_objects()
 
                     if "AGE" in df_transition_numbers.columns:
@@ -1439,8 +1338,8 @@ class ReskillingPathways:
                         "earnings_delta_closest_switch_step_",
                         # per-worker € deltas by step  ← IMPORTANT: MEAN, not SUM
                         "earnings_delta_closest_switch_hv_step_",
-                        "earnings_delta_closest_switch_pct_step_",  # NEW
-                        "earnings_delta_closest_switch_hv_pct_step_"  # NEW
+                        "earnings_delta_closest_switch_pct_step_",
+                        "earnings_delta_closest_switch_hv_pct_step_"
                     ))
                     sum_group = df_transition_numbers.columns.str.startswith((
                         "earnings_delta_closest_switch_sum_step_",  # totals by step (€)
@@ -1476,7 +1375,7 @@ class ReskillingPathways:
                         .aggregate(agg_funcs)
                     )
 
-                    # NEW: restore unsuffixed columns from baseline step (0)
+                    # restore unsuffixed columns from baseline step (0)
                     _base = 0
                     copy_map = {
                         f"n_viable_transitions_step_{_base}": "n_viable_transitions",
@@ -1491,7 +1390,7 @@ class ReskillingPathways:
                         if src in df_summary.columns:
                             df_summary[dst] = df_summary[src]
 
-                    # Visualiser expects Mio€ total as well
+                    # visualise expects Mio€ total as well
                     if "earnings_delta_closest_switch_sum" in df_summary.columns:
                         df_summary["earnings_delta_closest_switch_sum_mio"] = (
                                 df_summary["earnings_delta_closest_switch_sum"] / 1e6
@@ -1530,8 +1429,6 @@ class ReskillingPathways:
             Index of search occupation.
         search_label : str
             Label of search occupation.
-            TODO: seems a bit redundant given we already pass idx_occ. See if it can be
-             skipped.
         reskilling_mode : str
             Mode of reskilling. One of:
                 coreness_weighted: workers randomly acquire a skill, although with
@@ -1586,7 +1483,6 @@ class ReskillingPathways:
                 if self.df_coreness.loc[idx, "preferredLabel"] not in have
             ]
             if not rem:
-                print(f"⚠️ No new core-ranked skills for occupation {idx_occ}; skipping")
                 idx_skill = None
             else:
                 idx_skill = rem[skill_rank - 1]
@@ -1602,7 +1498,6 @@ class ReskillingPathways:
             pool_uris = [u for u in self.digital_skills if u not in have_uris]
 
             if not pool_uris:
-                print(f"⚠️  No new digital skills for occupation {idx_occ}; skipping upskill.")
                 idx_skill = None
             else:
                 chosen_uri = pd.Series(pool_uris).sample(n=1).iloc[0]
@@ -1620,7 +1515,6 @@ class ReskillingPathways:
             pool_uris = [u for u in self.green_skills if u not in have_uris]
 
             if not pool_uris:
-                print(f"⚠️  No new green skills for occupation {idx_occ}; skipping upskill.")
                 idx_skill = None
             else:
                 chosen_uri = pd.Series(pool_uris).sample(n=1).iloc[0]
@@ -1631,7 +1525,6 @@ class ReskillingPathways:
         # 3) update occ-skills matrix with worker's newly acquired skill
         #    Note: this adds the skill as an essential skill (value of 1).
         occ_skills_mat_3d_updated = occ_skills_mat.copy()
-        #occ_skills_mat_3d_updated.iloc[idx_occ, idx_skill] = 1 #OLD
         if idx_skill is not None:
             occ_skills_mat_3d_updated.iloc[idx_occ, idx_skill] = 1
 
@@ -1722,7 +1615,6 @@ class ReskillingPathways:
         print("Viability thresholds:", q_viable, q_highly_viable)
 
         # create output dir and fnames
-        # todo: rename?
         reg_constraint_str = "regC" if region_constraints else "no-regC"
 
         # format: "{sim_version}_{opt_target}-opt_{reg_constraint}_{year}"
@@ -1736,27 +1628,7 @@ class ReskillingPathways:
         target_dir = os.path.join(out_dir, dirname)
         utils.ccdir(target_dir)
 
-        #(REMOVED: read job availability per country, region and isco group)
-        #jobs_by_regions_countries = pd.read_pickle(
-        #    os.path.join(
-        #        "C:",
-        #        os.sep,
-        #        "eurostat_data",
-        #        "processed",
-        #        "lfs_employment_fluctuations_abs_1998_2019.pkl",
-        #    )
-        #)
-
-        # ceil job availability
-        #numeric_cols = jobs_by_regions_countries.select_dtypes(
-        #    include=[np.number]
-        #).columns.values
-
-        #jobs_by_regions_countries[numeric_cols] = np.ceil(
-        #    jobs_by_regions_countries[numeric_cols]
-        #)
-
-        # NEW: load the table of jobs by NUTS2 & ISCO
+        # load the table of jobs by NUTS2 & ISCO
         jobs_by_regions_countries = self.jobs_by_country_and_region()
 
         # -----------------------------------------------------------------------------
@@ -1818,7 +1690,7 @@ class ReskillingPathways:
                 print(f"[DEBUG] country={country}  LFS NUTS_IDs: {raw_codes}")
                 print(f"[DEBUG] country={country}  GeoData NUTS_IDs: {valid_nuts2}")
 
-                # NEW: restrict jobs_by_regions_countries to this country only
+                # restrict jobs_by_regions_countries to this country only
                 jobs_by_regions = jobs_by_regions_countries[
                     jobs_by_regions_countries["COUNTRYW"] == country
                     ]
@@ -1835,7 +1707,6 @@ class ReskillingPathways:
                     ],
                 )
 
-                # NEW
                 share_cols = [
                     "share_viable_to_decarbonize",
                     "share_unviable_to_decarbonize",
@@ -1861,7 +1732,6 @@ class ReskillingPathways:
                 for nuts_code in tqdm(nuts_codes):
                     # print(nuts_code)
 
-                    # ALTERED: absorptive part removed from within
                     jobs_by_region = jobs_by_regions[
                         jobs_by_regions["NUTS_ID"] == nuts_code
                     ]
@@ -1911,7 +1781,6 @@ class ReskillingPathways:
 
                         # -------------------------------------------------------------
                         # Reskilling step (optional)
-                        #   - I can now simulate reskilling journeys (-:
                         # -------------------------------------------------------------
 
                         # init baseline occupation-skills matrix (needs to be outside
@@ -1952,25 +1821,7 @@ class ReskillingPathways:
                             ]
 
                             # FILTER CRITERIA 2): target occupation is neutral or low-carbon
-                            # OLD logic
-                            #filtering_criteria_by_scenario = {
-                            #    "at_risk": (
-                            #        target_occs_filtered["category"].isin(
-                            #            self.target_cats_at_risk
-                            #        )
-                            #    ),
-                            #    "shortage": (
-                            #        target_occs_filtered["category"].isin(
-                            #            self.target_cats_shortage
-                            #        )
-                            #    ),
-                            #}
-                            ## filter out unvalid target occs
-                            #target_occs_filtered = target_occs_filtered.loc[
-                            #    filtering_criteria_by_scenario[scenario]
-                            #]
-
-                            # NEW logic: use share means instead of category
+                            # logic: use share means instead of category
                             share_filter_by_scenario = {
                                 "at_risk": [
                                     "share_viable_to_decarbonize",
@@ -1989,13 +1840,7 @@ class ReskillingPathways:
                             if not cols_to_check:
                                 raise NotImplementedError(f"No share filter defined for scenario: {scenario}")
 
-                            # NEW: filter occupations where any of the scenario-relevant shares are above country mean
-                            #mask_share = np.zeros(len(target_occs_filtered), dtype=bool)
-                            #for col in cols_to_check:
-                            #    if col not in target_occs_filtered.columns or col not in country_share_means:
-                            #        raise ValueError(f"Column '{col}' missing in target data or country means.")
-                            #    mask_share |= (target_occs_filtered[col] > country_share_means[col])
-
+                            # filter occupations where any of the scenario-relevant shares are above country mean
                             mask_share = False
                             for sc in cols_to_check:
                                 if scenario == "shortage":  # NEW: simpler logic for shortage
@@ -2014,16 +1859,7 @@ class ReskillingPathways:
                             print(f"[DEBUG1] NUTS2 {nuts_code}: raw targets = {len(target_occs)}, "
                                   f"pre-merge filtered = {len(target_occs_filtered)}")
 
-
-                            # REMOVED: combine with (updated) job availability at regional level
-                            #target_occs_filtered = target_occs_filtered.merge(
-                            #    jobs_by_region,
-                            #    left_on="code",
-                            #    right_on="ISCO08_3D",
-                            #    how="left",
-                            #)
-
-                            # NEW: only keep occupations that actually exist in this NUTS2
+                            # only keep occupations that actually exist in this NUTS2
                             if region_constraints:
                                 target_occs_filtered = target_occs_filtered.merge(
                                     jobs_by_region[["ISCO08_3D", "COEFFY"]],
@@ -2287,13 +2123,6 @@ class ReskillingPathways:
                     # end of loop over reskilling journey steps
                     results_by_region[nuts_code] = transition_number_data
 
-                # combine post-transition job availability to df
-                # note: temporarily commented out, need to fix bug raised by AT
-                # print(jobs_by_region_updated)
-                # df_jobs_by_region_post = pd.concat(
-                #     list(jobs_by_region_updated.values()), axis=0
-                # )
-
                 # combine transition results to df
                 nested_list = list(results_by_region.values())
                 flat_list = [item for sublist in nested_list for item in sublist]
@@ -2310,7 +2139,7 @@ class ReskillingPathways:
                 if "AGE" in df_transition_numbers.columns:
                     df_transition_numbers["AGE"] = pd.to_numeric(df_transition_numbers["AGE"], errors="coerce")
 
-                # NEW: defensive coercion: ensure coeffy_weight is numeric & non-negative
+                # defensive coercion: ensure coeffy_weight is numeric & non-negative
                 coeffy = coeffy_weight
                 df_transition_numbers[coeffy] = pd.to_numeric(df_transition_numbers.get(coeffy, 0),
                                                               errors="coerce").fillna(0)
@@ -2359,11 +2188,11 @@ class ReskillingPathways:
                     else:
                         continue
 
-                # NEW: propagate original occupation by taking the first value
+                # propagate original occupation by taking the first value
                 agg_funcs["orig_ISCO08_3D"] = lambda s: s.iat[0]
                 agg_funcs["orig_ISCO08_3D_label"] = lambda s: s.iat[0]
 
-                # NEW: stamp through added_skill_idx/label columns (only exist in optimal+regC)
+                # stamp through added_skill_idx/label columns (only exist in optimal+regC)
                 for col in df_transition_numbers.columns:
                     if col.startswith("added_skill_idx_step_") or col.startswith("added_skill_label_step_"):
                         def agg_added_skill(s):
@@ -2374,7 +2203,7 @@ class ReskillingPathways:
                                 return None
                         agg_funcs[col] = agg_added_skill
 
-                # NEW: carry forward the chosen transition_target & its code
+                # carry forward the chosen transition_target & its code
                 for col in df_transition_numbers.columns:
                     if col.startswith("transition_target_step_") or col.startswith("transition_target_code_step_"):
                         agg_funcs[col] = lambda s: s.dropna().iat[0] if s.dropna().any() else None
@@ -2385,7 +2214,7 @@ class ReskillingPathways:
                         .aggregate(agg_funcs)
                 )
 
-                # NEW: restore unsuffixed columns from baseline step (0)
+                # restore unsuffixed columns from baseline step (0)
                 _base = 0
                 copy_map = {
                     f"n_viable_transitions_step_{_base}": "n_viable_transitions",
@@ -2486,36 +2315,42 @@ class ReskillingPathways:
                 cmap_earnings.set_over("darkblue")
                 cmap_earnings.set_under("darkred")
 
-                my_colors = (
-                    "#f7fbff",  # almost white
-                    "#deebf7",  # very light blue
-                    "#9ecae1",  # light–mid blue
-                    "#3182bd",  # medium–dark blue
-                    "#08519c",  # deep blue
-                )
-
-                cmap_transitions = plotting_utils.discrete_cmap_with_manual_colors(
-                    cmap_type=my_colors,
-                    n_classes=len(my_colors),
-                    colour_replacements={0: "lightcoral"},
-                )
-                cmap_transitions.set_over("black")
-
                 # upper limits for colorbars
-                vmax_transitions = 10  # n viable transitions
+                vmax_transitions = 6
                 vmax_wages = 40  # million euro
+
+                # discrete bins with a hard cutoff at 1
+                # [0,1) red, [1,2), [2,3), [3,4), [4,5), [5,6), [6,vmax]
+                bounds_transitions = [0, 1, 2, 3, 4, 5, 6, np.nextafter(vmax_transitions, np.inf)]
+
+                # one color per bin interval (len(bounds)-1)
+                colors_transitions = [
+                    "lightcoral",  # [0,1)
+                    "#deebf7",  # [1,2)
+                    "#c6dbef",  # [2,3)
+                    "#9ecae1",  # [3,4)
+                    "#6baed6",  # [4,5)
+                    "#3182bd",  # [5,6)
+                    "#08519c",  # [6,vmax]
+                ]
+
+                cmap_transitions, norm_transitions, ticks_transitions = plotting_utils.thresholded_discrete_cmap_and_norm(
+                    base_colors=colors_transitions,
+                    bounds=bounds_transitions,
+                    over_color="black",
+                )
 
                 # transition numbers
                 gdf_transition_numbers_by_nuts.plot(
                     column="n_viable_transitions_rel",
                     legend=True,
                     cmap=cmap_transitions,
-                    vmin=0,
-                    vmax=vmax_transitions,
+                    norm=norm_transitions,  # <<< NEW (this is the important part)
                     legend_kwds={
                         "label": "Viable transitions per worker [-]",
                         "fraction": 0.03,
                         "extend": "max",
+                        "ticks": ticks_transitions,
                     },
                     missing_kwds={
                         "facecolor": "lightgrey",
@@ -2846,7 +2681,7 @@ class ReskillingPathways:
             df_transition_numbers = df_transition_numbers.infer_objects()
             df_transition_numbers["AGE"] = pd.to_numeric(df_transition_numbers["AGE"])
 
-            # NEW: Vectorized creation of per-step M€ totals
+            # Vectorized creation of per-step M€ totals
             # 1) find totals in € (…_sum_step_<s>) and coerce to numeric
             sum_eur_cols = df_transition_numbers.filter(
                 regex=r"^earnings_delta_closest_switch_sum_step_\d+$"
@@ -2926,11 +2761,6 @@ class ReskillingPathways:
                 .drop(columns=["NUTS_ID"])
             )
 
-            # df_transition_numbers_by_nuts["n_viable_transitions_rel_step_{}".format(step)] = (
-            #     df_transition_numbers_by_nuts["n_viable_transitions_sum_step_{}".format(step)]
-            #     / df_transition_numbers_by_nuts[coeffy_weight]
-            # )
-
             # to gdf
             gdf_transition_numbers_by_nuts = pd.merge(
                 self.gdf[
@@ -2941,7 +2771,7 @@ class ReskillingPathways:
                 how="left",
             )
 
-            # NEW: Map fix for countries like NL and MT (weird NUTS2 reporting)
+            # map fix for countries like NL and MT (weird NUTS2 reporting)
             if not regional_constraint:
                 step_col = f"n_viable_transitions_step_{step}"
                 # country-level mean of the plotted metric
@@ -2989,33 +2819,38 @@ class ReskillingPathways:
                         "hspace": 0,
                     },
                 )
+            vmax_transitions = 6
+            bounds_transitions = [0, 1, 2, 3, 4, 5, 6, np.nextafter(vmax_transitions, np.inf)]
 
             print(">>> Using custom palette in EU visualiser")
-            my_colors = (
-                "#f7fbff",  # almost white
-                "#deebf7",  # very light blue
-                "#9ecae1",  # light–mid blue
-                "#3182bd",  # medium–dark blue
-                "#08519c",  # deep blue
+
+            colors_transitions = [
+                "lightcoral",  # [0,1)
+                "#deebf7",  # [1,2)
+                "#c6dbef",  # [2,3)
+                "#9ecae1",  # [3,4)
+                "#6baed6",  # [4,5)
+                "#3182bd",  # [5,6)
+                "#08519c",  # [6,vmax]
+            ]
+
+            cmap_transitions, norm_transitions, ticks_transitions = plotting_utils.thresholded_discrete_cmap_and_norm(
+                base_colors=colors_transitions,
+                bounds=bounds_transitions,
+                over_color="black",
             )
-            cmap_transitions = plotting_utils.discrete_cmap_with_manual_colors(
-                cmap_type=my_colors,
-                n_classes=len(my_colors),
-                colour_replacements={0: "lightcoral"},
-            )
-            cmap_transitions.set_over("black")
 
             # transition numbers
             gdf_transition_numbers_by_nuts.plot(
                 column="n_viable_transitions_step_{}".format(step),
                 legend=True,
                 cmap=cmap_transitions,
-                vmin=0,
-                vmax=vmax_transitions,
+                norm=norm_transitions,
                 legend_kwds={
                     "label": "Job transitions per worker [-]",
                     "fraction": cbar_fraction,
                     "extend": "max",
+                    "ticks": ticks_transitions,
                 },
                 missing_kwds={
                     "facecolor": "lightgrey",
@@ -3048,7 +2883,7 @@ class ReskillingPathways:
                 )
             )
 
-            # --- PER-WORKER MAP FROM TOTALS ÷ WEIGHT (recommended) ---
+            # PER-WORKER MAP FROM TOTALS ÷ WEIGHT
 
             # 1) mask countries with missing earnings data on the *totals* column
             cntr_missing = ['IT', 'NL', 'DE', 'HU', 'AT', 'RO', 'PL', 'ES', 'LT', 'SI', 'CY', 'BE', 'CZ', 'HR', 'IS',
@@ -3265,7 +3100,6 @@ class ReskillingPathways:
                         .index.values
                     )
 
-                    #NEW
                     from matplotlib.container import BarContainer
                     def _main_bar_container(ax):
                         bar_containers = [c for c in ax.containers if isinstance(c, BarContainer)]
@@ -3291,7 +3125,7 @@ class ReskillingPathways:
                             ax=ax1,
                         )
 
-                        # right (NEW, worker-weighted mean per sector)
+                        # right (worker-weighted mean per sector)
                         earn_col = f"earnings_pw_w_step_{step}"
                         wt = self.transition_pool_weights[scenario]  # e.g. "COEFFY_share_unviable_to_decarbonize"
 
@@ -3388,7 +3222,7 @@ class ReskillingPathways:
                     gridspec_kw={"width_ratios": [0.7, 0.3]},
                 )
 
-                # NEW — weighted earnings per worker, consistent with the map (totals ÷ headcount)
+                # weighted earnings per worker, consistent with the map (totals ÷ headcount)
                 norm_col = self.transition_pool_weights[scenario]
                 df_sector[f"earnings_pw_w_step_{step}"] = (
                         df_sector[f"earnings_delta_closest_switch_sum_step_{step}"] / df_sector[norm_col]
@@ -3402,7 +3236,7 @@ class ReskillingPathways:
                     .index.values
                 )
 
-                # NEW, fix bar labels
+                # fix bar labels
                 from matplotlib.container import BarContainer
                 def _main_bar_container(ax):
                     bar_containers = [c for c in ax.containers if isinstance(c, BarContainer)]
@@ -3518,7 +3352,7 @@ if __name__ == "__main__":
     from data.lfs import EuLfs
 
     # re-run simulations & plot or plot only?
-    rerun_simulations = True
+    rerun_simulations = False
 
     # ---------------------------------------------------------------------
     # Input data
@@ -3536,7 +3370,7 @@ if __name__ == "__main__":
             input_fname_lfs="clean_eu_lfs_merged_{year}_with_final_unweighted_shares_and_earnings_incdecil_imputed",
         )
 
-        # NEW: patch column names for new classification
+        # patch column names for new classification
         to_rename = [
             col
             for col in lfs_data.columns
@@ -3548,7 +3382,6 @@ if __name__ == "__main__":
         print("share_… columns now:", [c for c in lfs_data.columns if c.startswith("share_")])
         print("COEFFY_share_… columns now:", [c for c in lfs_data.columns if c.startswith("COEFFY_share_")])
 
-        # todo: move to lfs preprocessing chain
         # add required categories
         cats_regionw = lfs_data["REGION_2DW"].cat.categories.values
         cats_region = lfs_data["REGION_2D"].cat.categories.values
@@ -3622,7 +3455,7 @@ if __name__ == "__main__":
     ]
 
     # transition pools to analyse
-    scenarios = ["at_risk"]  # ["at_risk", "high_carbon", "shortage"]
+    scenarios = ["shortage"]  # ["at_risk", "high_carbon", "shortage"]
 
     # reskilling options to consider
     reskilling_modes = [
@@ -3649,7 +3482,7 @@ if __name__ == "__main__":
     regional_constraints = [True, False] # [True, False]
 
     # length of reskilling journey
-    reskilling_journey_length = 20
+    reskilling_journey_length = 30
     steps = np.arange(0, reskilling_journey_length + 1)
 
     # name mapping
