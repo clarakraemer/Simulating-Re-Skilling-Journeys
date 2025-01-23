@@ -1,0 +1,9 @@
+# -------------------------------------------------------------------------------------
+# Transition Analysis Parameters
+# -------------------------------------------------------------------------------------
+TRANSITION_ANALYSIS:
+  MIN_VIABLE: 0.3
+  HIGHLY_VIABLE: 0.4
+  MAX_JOB_ZONE_DIF: 1
+  MIN_EARNINGS_RATIO: 0.75
+

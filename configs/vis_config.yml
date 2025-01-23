@@ -1,0 +1,14 @@
+# map parameters (projection, ...)
+EU_MAPS:
+  epsg: 3035
+  bbox_eu_epsg_3035: [2500000.0, 6000000.0, 1300000.0, 5500000.0]
+  missing_kwds: {"facecolor": "white", "hatch": "//", "edgecolor": "grey"}
+  edgecolor: "grey"
+  linewidth: 0.5
+  robust_cmap_percentiles: [2, 98]
+  cmap: "Greys"
+  countries_for_maps: [
+    "AT", "BE", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
+    "HU", "IE", "IS", "IT", "LT", "LU", "LV", "NL", "NO", "PT", "RO", "SE",
+    "SI", "SK", "UK"
+  ]

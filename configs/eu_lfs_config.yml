@@ -1,0 +1,111 @@
+# -------------------------------------------------------------------------------------
+# EU-LFS
+#   n_digits_isco08: int
+#     Number of digits in ISCO-08 occupation classification. Needs to be in [2, 4].
+# -------------------------------------------------------------------------------------
+
+# Paths to data folders
+paths:
+  raw: "C:\\eurostat_data\\raw"
+  raw_yf: "C:\\eurostat_data\\raw\\Yearly_Data\\YearlyFiles_83_2019\\_YearlyFiles"
+  interim: "C:\\eurostat_data\\interim"
+  processed: "C:\\eurostat_data\\processed"
+  fmt_folder: "{country}_YEAR_1998_onwards"
+  fmt_file: "{country}{year}_y.csv"
+
+# Preprocessing parameters
+preprocessing:
+  n_digits_isco08: 3
+  n_digits_nace: 1
+  n_digits_nuts: 2
+  years: ["2019"]
+  countries: [
+    "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
+    "HU", "IE", "IS", "IT", "LT", "LU", "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE",
+    "SI", "SK", "UK"
+  ]
+  countries_isco08_2d: ["BG", "PL"]
+  countries_isco08_1d: ["MT"]
+  countries_nuts_1d: ["UK"]
+  countries_nuts_0d: ["MT", "NL"]
+  scaling_factor_coeff: 1000
+  pension_age: [ '77', '82', '87', '92', '97' ]
+  variables: [
+    "WSTATOR", "SEX", "NACE1D", "ISCO3D", "COUNTRYW", "REGIONW", "FTPT", "REFYEAR",
+    "COUNTRY", "REGION", "DEGURBA", "HHTYPE", "AGE", "ILOSTAT", "EDUC4WN", "HATLEV1D",
+    "MAINSTAT", "INCDECIL", "COEFF"
+  ]
+  na_values: {
+    "WSTATOR": ["9"],
+    "SEX": ["9"],
+    "NACE1D": ["9"],
+    "ISCO3D": ["999"],
+    "COUNTRYW": ["99"],
+    "REGIONW": ["00", "99"],
+    "FTPT": ["9"],
+    "REFYEAR": ["9999"],
+    "COUNTRY": ["99"],
+    "REGION": ["00"],
+    "ILOSTAT": ["9"],
+    "EDUC4WN": ["9"],
+    "HATLEV1D": ["9"],
+    "MAINSTAT": ["9"],
+    "INCDECIL": ["99"]
+}
+  dtypes_in: {
+    "WSTATOR": "str",
+    "SEX": "str",
+    "NACE1D": "str",
+    "ISCO3D": "str",
+    "COUNTRYW": "str",
+    "REGIONW": "str",
+    "FTPT": "str",
+    "REFYEAR": "str",
+    "COUNTRY": "str",
+    "REGION": "str",
+    "DEGURBA": "str",
+    "HHTYPE": "str",
+    "AGE": "str",
+    "ILOSTAT": "str",
+    "EDUC4WN": "str",
+    "HATLEV1D": "str",
+    "MAINSTAT": "str",
+    "INCDECIL": "str",
+    "COEFF": "float"
+}
+  dtypes_out: {
+    "WSTATOR": "category",
+    "SEX": "category",
+    "NACE1D": "category",
+    "ISCO3D": "category",
+    "COUNTRYW": "category",
+    "REGIONW": "category",
+    "FTPT": "category",
+    "REFYEAR": "category",
+    "COUNTRY": "category",
+    "REGION": "category",
+    "DEGURBA": "category",
+    "HHTYPE": "category",
+    "AGE": "category",
+    "ILOSTAT": "category",
+    "EDUC4WN": "category",
+    "HATLEV1D": "category",
+    "MAINSTAT": "category",
+    "INCDECIL": "category",
+    "COEFF": "float"
+}
+
+# map parameters (projection, ...)
+visualisation:
+  epsg: 3035
+  bbox_eu_epsg_3035: [2500000.0, 6000000.0, 1300000.0, 5500000.0]
+  missing_kwds: {"facecolor": "white", "hatch": "//", "edgecolor": "grey"}
+  edgecolor: "grey"
+  linewidth: 0.5
+  robust_cmap_percentiles: [2, 98]
+  cmap: "Greys"
+  countries_for_maps: [
+    "AT", "BE", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
+    "HU", "IE", "IS", "IT", "LT", "LU", "LV", "NL", "NO", "PT", "RO", "SE",
+    "SI", "SK", "UK"
+  ]

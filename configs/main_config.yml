@@ -1,0 +1,39 @@
+# metadata giving hints on how the config file should be parsed
+metadata:
+  path_keys: ["eulfs", "crosswalk"]
+
+# -------------------------------------------------------------------------------------
+# PATHS
+# -------------------------------------------------------------------------------------
+# EU-LFS Data
+eulfs:
+  raw: "C:\\eurostat_data\\raw"
+  raw_yf: "C:\\eurostat_data\\raw\\Yearly_Data\\YearlyFiles_83_2019\\_YearlyFiles"
+  interim: "C:\\eurostat_data\\interim"
+  processed: "C:\\eurostat_data\\processed"
+
+# Note: relative paths need to start one level below the project directory
+#   to be parsed correctly
+crosswalk:
+  onet_esco: "data\\raw\\mapping-career-causeways\\codebase\\data\\processed
+  \\ESCO_ONET_xwalk_full.csv"
+
+# -------------------------------------------------------------------------------------
+# ESCO
+# -------------------------------------------------------------------------------------
+ESCO:
+  LANGUAGE: "en"
+  VERSION: "v1.0.3"
+  VERSION_NEWEST: "v1.1.0"
+  WEIGHT_UNIFORM: 1
+  WEIGHT_ESSENTIAL_SKILL: 1
+  WEIGHT_OPTIONAL_SKILL: 0.5
+
+# -------------------------------------------------------------------------------------
+# Transition Analysis Parameters
+# -------------------------------------------------------------------------------------
+TRANSITION_ANALYSIS:
+  MIN_VIABLE: 0.3
+  HIGHLY_VIABLE: 0.4
+  MAX_JOB_ZONE_DIF: 1
+  MIN_EARNINGS_RATIO: 0.75
