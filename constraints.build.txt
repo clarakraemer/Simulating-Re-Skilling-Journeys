@@ -1,0 +1,5 @@
+pip<25.3
+setuptools<75
+wheel<0.45
+Cython<3.0
+numpy<2
