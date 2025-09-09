@@ -1,0 +1,7 @@
+
+# ignore data/results everywhere
+/data/
+/results/
+**/data/
+**/results/
+notebooks/**/.ipynb_checkpoints/
