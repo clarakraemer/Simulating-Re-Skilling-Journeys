@@ -15,7 +15,7 @@ class UsefulPaths:
     https://github.com/nestauk/mapping-career-causeways/blob/main/mapping_career_causeways/__init__.py.
     """
 
-    def __init__(self, fn_config_path=None):
+    def __init__(self, fn_config_path="paths_config.yml"):
         """
 
         Parameters
@@ -23,7 +23,7 @@ class UsefulPaths:
         fn_config_path : str
             Name of yml file storing additional path-specific configurations.
         """
-
+        # Default fallback paths (used if no config is loaded)
         self.project_dir = str(project_path)
         self.data_dir = os.path.join(self.project_dir, "data")
         self.data_raw = os.path.join(self.project_dir, "data", "raw")
@@ -38,27 +38,22 @@ class UsefulPaths:
         self.models_dir = os.path.join(self.project_dir, "models")
         self.config_dir = os.path.join(self.project_dir, "configs")
 
-        # optionally parse config file params
+        # Optionally parse and overwrite paths from config
         if fn_config_path is not None:
             config = load_config(os.path.join(self.config_dir, fn_config_path))
-            metadata = config["metadata"]
-            config.pop("metadata")
+            self.config = config
+            metadata = config.get("metadata", {})
+            config.pop("metadata", None)
 
-            # unpack variables
-            for k, v in config.items():
-                for k2, v2 in v.items():
-                    k_new = "{}_{}".format(k, k2)
+            for section, values in config.items():
+                for key, val in values.items():
+                    attr_name = f"{section}_{key}"
 
-                    # strings in this list are relative paths in the config
-                    # file, starting from the project directory
-                    if k in metadata["relative_paths"]:
-                        v_new = os.path.join(self.project_dir, v2)
-                    else:
-                        v_new = v2
-                    # instantiate class attributes
-                    # TODO: check if that really makes sense. don't think so.
-                    setattr(self, k_new, v_new)
+                    # Handle relative paths
+                    if section in metadata.get("relative_paths", []):
+                        val = os.path.join(self.project_dir, val)
 
+                    setattr(self, attr_name, val)
 
 def extract_cols_by_kw(df, char_seq, invert_selection=False):
     col_sel = df.columns.str.contains(char_seq)
@@ -66,7 +61,6 @@ def extract_cols_by_kw(df, char_seq, invert_selection=False):
         col_sel = ~col_sel
     cols_to_retain = df.columns[col_sel]
     return df[cols_to_retain]
-
 
 def sort_columns(df):
     cols_sorted = df.columns.sort_values().values
@@ -129,7 +123,6 @@ def perc_missing(df):
 def downcast_df(df, errors="ignore", downcast="integer"):
     """https://stackoverflow.com/questions/15891038/change-column-type-in-pandas"""
     return df.apply(pd.to_numeric, errors=errors, downcast=downcast)
-
 
 def get_dict_subset(d, keys):
     """Subset dict based on a set of keys."""

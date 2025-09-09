@@ -4,7 +4,7 @@ import pandas as pd
 from scipy.spatial import distance
 
 from src import utils
-from src.data.framework import Esco
+from data.framework import Esco
 
 esco = Esco()
 useful_paths = utils.UsefulPaths()
@@ -108,7 +108,8 @@ def find_closest(i, similarity_matrix, df, best="max"):
 
 
 def create_multiindex_for_esco_occs(occ):
-    occ["esco_5_digit"] = occ["code"].str.slice(0, 6)
+    #occ["esco_5_digit"] = occ["code"].str.slice(0, 6) # old version
+    occ["esco_5_digit"] = occ["code"].astype(str).str.slice(0, 6) # new version
     occ["isco_4_digit"] = occ["iscoGroup"]
     occ["isco_3_digit"] = occ["iscoGroup"].astype(str).str.slice(0, 3)
 

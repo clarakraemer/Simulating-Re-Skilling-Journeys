@@ -7,16 +7,16 @@ metadata:
 # -------------------------------------------------------------------------------------
 # EU-LFS Data
 eulfs:
-  raw: "C:\\eurostat_data\\raw"
-  raw_yf: "C:\\eurostat_data\\raw\\Yearly_Data\\YearlyFiles_83_2019\\_YearlyFiles"
-  interim: "C:\\eurostat_data\\interim"
-  processed: "C:\\eurostat_data\\processed"
+  raw: "data/eurostat_data/raw"
+  raw_yf: "data/eurostat_data/raw/Yearly_Data/YearlyFiles_2023"
+  interim: "data/eurostat_data/interim"
+  processed: "data/eurostat_data/processed"
+
+crosswalk:
+  onet_esco: "data/raw/mapping-career-causeways/codebase/data/processed/ESCO_ONET_xwalk_full.csv"
 
 # Note: relative paths need to start one level below the project directory
 #   to be parsed correctly
-crosswalk:
-  onet_esco: "data\\raw\\mapping-career-causeways\\codebase\\data\\processed
-  \\ESCO_ONET_xwalk_full.csv"
 
 # -------------------------------------------------------------------------------------
 # ESCO

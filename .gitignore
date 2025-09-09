@@ -1,7 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+**/__pycache__/
 
-# ignore data/results everywhere
-/data/
-/results/
-**/data/
-**/results/
+# Virtual envs
+.venv/
+.venv_*/
+
+# Env files / secrets (keep out of Git)
+.env
+.env.*
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
 notebooks/**/.ipynb_checkpoints/
+
+# Build / misc
+dist/
+build/

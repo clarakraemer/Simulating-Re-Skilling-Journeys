@@ -18,7 +18,7 @@ lfs_eu:
   n_digits_isco08: 3
   n_digits_nace: 1
   n_digits_nuts: 2
-  years: ["2019"]
+  years: ["2023"]
   countries: [
     "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
     "HU", "IE", "IS", "IT", "LT", "LU", "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE",
@@ -31,66 +31,66 @@ lfs_eu:
   scaling_factor_coeff: 1000
   pension_age: [ '77', '82', '87', '92', '97' ]
   variables: [
-    "WSTATOR", "SEX", "NACE1D", "ISCO3D", "COUNTRYW", "REGIONW", "FTPT", "REFYEAR",
-    "COUNTRY", "REGION", "DEGURBA", "HHTYPE", "AGE", "ILOSTAT", "EDUC4WN", "HATLEV1D",
-    "MAINSTAT", "INCDECIL", "COEFF"
+    "SEX", "NACE2_1D", "ISCO08_3D", "COUNTRYW", "REGION_2DW", "FTPT", "REFYEAR",
+    "COUNTRY", "REGION_2D", "DEGURBA", "HHTYPE", "AGE", "ILOSTAT", "EDUC4WEEKS", "HATLEV1D",
+    "MAINSTAT", "INCDECIL", "COEFFY", "WKSTAT"
   ]
   na_values: {
-    "WSTATOR": ["9"],
+    "WKSTAT": ["9"],
     "SEX": ["9"],
-    "NACE1D": ["9"],
-    "ISCO3D": ["999"],
+    "NACE2_1D": ["9"], #prev NACE1D
+    "ISCO08_3D": ["999"], #prev ISCO3D
     "COUNTRYW": ["99"],
-    "REGIONW": ["00", "99"],
+    "REGION_2DW": ["00", "99"], #prev REGIONW
     "FTPT": ["9"],
     "REFYEAR": ["9999"],
     "COUNTRY": ["99"],
-    "REGION": ["00"],
+    "REGION_2D": ["00"], #prev REGION
     "ILOSTAT": ["9"],
-    "EDUC4WN": ["9"],
+    "EDUC4WEEKS": ["9"], #prev EDUC4WN
     "HATLEV1D": ["9"],
     "MAINSTAT": ["9"],
     "INCDECIL": ["99"]
 }
   dtypes_in: {
-    "WSTATOR": "str",
+    "WKSTAT": "str",
     "SEX": "str",
-    "NACE1D": "str",
-    "ISCO3D": "str",
+    "NACE2_1D": "str",
+    "ISCO08_3D": "str",
     "COUNTRYW": "str",
-    "REGIONW": "str",
+    "REGION_2DW": "str",
     "FTPT": "str",
     "REFYEAR": "str",
     "COUNTRY": "str",
-    "REGION": "str",
+    "REGION_2D": "str",
     "DEGURBA": "str",
     "HHTYPE": "str",
     "AGE": "str",
     "ILOSTAT": "str",
-    "EDUC4WN": "str",
+    "EDUC4WEEKS": "str",
     "HATLEV1D": "str",
     "MAINSTAT": "str",
     "INCDECIL": "str",
-    "COEFF": "float"
+    "COEFFY": "float" #prev COEFF
 }
   dtypes_out: {
-    "WSTATOR": "category",
+    "WKSTAT": "category",
     "SEX": "category",
-    "NACE1D": "category",
-    "ISCO3D": "category",
+    "NACE2_1D": "category",
+    "ISCO08_3D": "category",
     "COUNTRYW": "category",
-    "REGIONW": "category",
+    "REGION_2DW": "category",
     "FTPT": "category",
     "REFYEAR": "category",
     "COUNTRY": "category",
-    "REGION": "category",
+    "REGION_2D": "category",
     "DEGURBA": "category",
     "HHTYPE": "category",
     "AGE": "category",
     "ILOSTAT": "category",
-    "EDUC4WN": "category",
+    "EDUC4WEEKS": "category",
     "HATLEV1D": "category",
     "MAINSTAT": "category",
     "INCDECIL": "category",
-    "COEFF": "float"
+    "COEFFY": "float"
 }
