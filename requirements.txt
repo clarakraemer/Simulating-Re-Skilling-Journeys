@@ -125,7 +125,6 @@ sphinxcontrib-htmlhelp==2.1.0
 sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==2.0.0
 sphinxcontrib-serializinghtml==2.0.0
--e git+https://github.com/clarakraemer/Simulating-Re-Skilling-Journeys.git@31acd18af5b9249b5744c56ffdd2832b582a5d2a#egg=src
 stack-data==0.6.3
 statannotations==0.7.1
 statsmodels==0.14.4
