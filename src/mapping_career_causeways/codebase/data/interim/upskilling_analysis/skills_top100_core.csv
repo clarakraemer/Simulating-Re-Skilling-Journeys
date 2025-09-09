@@ -1,0 +1,101 @@
+id,preferred_label,reuse_level,code,skill_category,coreness
+3475,use different communication channels,cross-sector,S1.2.1,S,1.0
+12026,train employees,cross-sector,S1.3.3,S,0.9398605341352816
+2778,manage staff,cross-sector,S4.8.1,S,0.9313106715798315
+1776,manage budgets,cross-sector,S4.3.1,S,0.8966530267803284
+710,communicate with customers,cross-sector,S3.4.1,S,0.8544977798007238
+160,create solutions to problems,cross-sector,S1.9.1,S,0.751921605121558
+7753,write work-related reports,cross-sector,S1.13.3,S,0.7481899453383251
+7508,quality standards,cross-sector,K4.1.6,K,0.7139780397618629
+5558,identify customer's needs,sector-specific,S1.7.2,S,0.7013071796228068
+12672,liaise with managers,cross-sector,S1.2.1,S,0.6365481572655901
+10823,perform project management,cross-sector,S4.2.1,S,0.5766290695532357
+12571,mechanics,cross-sector,K7.1.5,K,0.5472144270979271
+2756,troubleshoot,cross-sector,S1.9.1,S,0.5460278240656473
+9007,adhere to organisational guidelines,cross-sector,S3.3.3,S,0.5424872828628524
+3879,recruit employees,cross-sector,S4.7.0,S,0.5315076817219698
+11596,build business relationships,cross-sector,S1.2.3,S,0.5115603096677861
+11012,have computer literacy,cross-sector,S5.5.0,S,0.49818370025478975
+5184,wear appropriate protective gear,cross-sector,S3.3.1,S,0.4841885833823371
+3654,monitor stock level,sector-specific,S2.8.2,S,0.4710617163064431
+11611,apply health and safety standards,cross-sector,S3.3.1,S,0.4677836451389989
+10065,develop professional network,cross-sector,S1.2.3,S,0.4652481895339359
+7794,manage contracts,cross-sector,S1.1.1,S,0.46331052836952985
+5640,ensure equipment availability,cross-sector,S4.3.3,S,0.46317773684538477
+12451,scientific research methodology,cross-sector,K1.0.1,K,0.4545670321310806
+6037,project management,sector-specific,K4.1.3,K,0.454516830245962
+10988,present reports,cross-sector,S1.4.1,S,0.44804129410535687
+1571,perform risk analysis,cross-sector,S2.7.5,S,0.4461498259411961
+837,use a computer,cross-sector,S5.5.0,S,0.4396290283049831
+10264,apply technical communication skills,cross-sector,S1.4.2,S,0.4385566689146269
+10810,keep records of work progress,cross-sector,S2.2.5,S,0.43254023631223765
+2476,speak different languages,cross-sector,S1.15.1,S,0.4306191365683135
+10851,chemistry,cross-sector,K5.3.1,K,0.4299774153953955
+7992,supervise staff,cross-sector,S4.8.1,S,0.4279886658515398
+3571,mathematics,cross-sector,K5.4.1,K,0.42750711252817664
+13387,perform market research,cross-sector,S2.1.1,S,0.4246043811278935
+7761,meet deadlines,cross-sector,A1.13.1,A,0.4142148452954323
+1809,maintain relationship with customers,sector-specific,S1.2.3,S,0.41363750743626665
+1377,inspect quality of products,cross-sector,S2.8.1,S,0.3890590140926738
+424,ensure compliance with environmental legislation,cross-sector,S3.3.2,S,0.3845686757632616
+1123,work ergonomically,cross-sector,S3.3.1,S,0.3824385926445721
+10570,electricity,cross-sector,K7.1.3,K,0.3822949735364154
+4966,oversee quality control,cross-sector,A1.12.1,A,0.3780466710905737
+3319,electrical engineering,cross-sector,K7.1.3,K,0.3729056714204712
+1737,order supplies,cross-sector,S1.6.3,S,0.3684604087625311
+524,business management principles,cross-sector,K4.1.3,K,0.3661105167198086
+5574,read standard blueprints,cross-sector,S2.1.3,S,0.3656298681578435
+2676,execute analytical mathematical calculations,cross-sector,S2.6.1,S,0.3631140367576602
+4223,perform scientific research,cross-sector,S2.1.1,S,0.36230175597488173
+2716,record test data,cross-sector,S2.2.5,S,0.3609290887444917
+1705,engineering principles,cross-sector,K7.1.0,K,0.3603187829284044
+3651,manage health and safety standards,cross-sector,S3.3.1,S,0.3600493231895163
+5594,physics,cross-sector,K5.3.3,K,0.35867857161357836
+5942,environmental legislation,cross-sector,K4.2.0,K,0.3550316514436366
+8425,human anatomy,cross-sector,K9.1.2,K,0.3527883551099015
+13004,company policies,sector-specific,K4.1.7,K,0.35209912480353056
+3840,provide cost benefit analysis reports,cross-sector,S2.2.1,S,0.3487285149529479
+8344,ICT software specifications,sector-specific,K6.0.3,K,0.34833388033520807
+6117,engineering processes,sector-specific,K7.1.5,K,0.34718740738969345
+12240,assess financial viability,cross-sector,S2.7.3,S,0.3463720079891618
+3722,perform test run,cross-sector,S2.8.1,S,0.3458489865252302
+9791,address problems critically,cross-sector,S1.9.1,S,0.3440673231030678
+7981,electronics,cross-sector,K7.1.4,K,0.3424322382188666
+6665,cost management,sector-specific,K4.1.3,K,0.3420191402075125
+9466,use CAD software,cross-sector,S5.6.3,S,0.34055884479326576
+4337,use personal protection equipment,cross-sector,S3.3.1,S,0.3361197677832202
+11156,apply organisational techniques,cross-sector,S4.2.2,S,0.336055155996429
+2144,liaise with local authorities,cross-sector,S1.2.1,S,0.332920953744595
+6752,statistics,cross-sector,K5.4.2,K,0.33223143801781363
+87,manage supplies,cross-sector,S4.3.3,S,0.331409222142286
+2187,handle customer complaints,cross-sector,S1.1.3,S,0.3266766172540859
+6288,maintain customer service,cross-sector,A1.12.3,A,0.32521189661018735
+8775,multimedia systems,cross-sector,K2.1.1,K,0.32252088152109126
+4255,maintain equipment,cross-sector,S8.0.0,S,0.31886484277642047
+6292,pollution prevention,cross-sector,K7.1.2,K,0.3187440331766971
+3248,maintain relationship with suppliers,sector-specific,S1.2.3,S,0.3168370325666707
+4781,technical drawings,cross-sector,K7.3.2,K,0.315418582701732
+8560,listen actively,cross-sector,S1.7.3,S,0.31421706095756746
+4028,design principles,cross-sector,K2.1.2,K,0.31348089432549453
+1534,provide first aid,cross-sector,S3.2.1,S,0.3122516206131385
+12699,analyse production processes for improvement,cross-sector,S2.7.4,S,0.31222721015757643
+8783,teamwork principles,cross-sector,K0.3.0,K,0.3107731426673325
+2979,manufacturing processes,cross-sector,K7.2.2,K,0.3103800107768015
+7882,biology,cross-sector,K5.1.1,K,0.30878870617793636
+6526,monitor automated machines,cross-sector,S8.0.0,S,0.30874825205216594
+9306,delegate activities,cross-sector,S4.8.2,S,0.30379869384186303
+11452,set up the controller of a machine,cross-sector,S5.7.0,S,0.30133253913190194
+12932,follow company standards,cross-sector,S3.3.3,S,0.30027973346768677
+215,provide technical documentation,cross-sector,S2.2.6,S,0.2992059736586616
+3997,collect samples for analysis,cross-sector,S6.3.6,S,0.28841375279426573
+8630,CAD software,cross-sector,K6.0.3,K,0.286752413183548
+4601,pollution legislation,sector-specific,K4.2.0,K,0.28501655292198175
+3535,adjust engineering designs,cross-sector,S1.11.5,S,0.28364924136994785
+2349,perform data analysis,cross-sector,S5.5.2,S,0.28095395107057886
+3595,keep task records,cross-sector,S2.2.5,S,0.2805132824211213
+11337,execute feasibility study,cross-sector,S2.7.4,S,0.2798971614155121
+8306,mechanical engineering,sector-specific,K7.1.5,K,0.2793394079500464
+3893,ensure public safety and security,sector-specific,S3.3.0,S,0.2790866908669991
+8393,keep personal administration,sector-specific,S2.2.5,S,0.2774906880089046
+4921,contract law,cross-sector,K4.2.0,K,0.27627668109731135
+12924,perform resource planning,cross-sector,S2.6.3,S,0.2734255523671847

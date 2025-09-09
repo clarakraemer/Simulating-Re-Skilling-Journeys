@@ -6,11 +6,11 @@
 
 # Paths to data folders
 paths:
-  raw: "C:\\eurostat_data\\raw"
-  raw_yf: "C:\\eurostat_data\\raw\\Yearly_Data\\YearlyFiles_83_2019\\_YearlyFiles"
-  interim: "C:\\eurostat_data\\interim"
-  processed: "C:\\eurostat_data\\processed"
-  fmt_folder: "{country}_YEAR_1998_onwards"
+  raw: "data/eurostat_data/raw"
+  raw_yf: "data/eurostat_data/raw/Yearly_Data/YearlyFiles_2023"
+  interim: "data/eurostat_data/interim"
+  processed: "data/eurostat_data/processed"
+  fmt_folder: ""  # Correct if files are directly inside YearlyFiles_2023
   fmt_file: "{country}{year}_y.csv"
 
 # Preprocessing parameters
@@ -18,11 +18,11 @@ preprocessing:
   n_digits_isco08: 3
   n_digits_nace: 1
   n_digits_nuts: 2
-  years: ["2019"]
-  countries: [
-    "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
+  years: ["2023"]
+  countries: [ #GR not available
+    "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR",
     "HU", "IE", "IS", "IT", "LT", "LU", "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE",
-    "SI", "SK", "UK"
+    "SI", "SK"
   ]
   countries_isco08_2d: ["BG", "PL"]
   countries_isco08_1d: ["MT"]
@@ -31,68 +31,70 @@ preprocessing:
   scaling_factor_coeff: 1000
   pension_age: [ '77', '82', '87', '92', '97' ]
   variables: [
-    "WSTATOR", "SEX", "NACE1D", "ISCO3D", "COUNTRYW", "REGIONW", "FTPT", "REFYEAR",
-    "COUNTRY", "REGION", "DEGURBA", "HHTYPE", "AGE", "ILOSTAT", "EDUC4WN", "HATLEV1D",
-    "MAINSTAT", "INCDECIL", "COEFF"
-  ]
-  na_values: {
-    "WSTATOR": ["9"],
-    "SEX": ["9"],
-    "NACE1D": ["9"],
-    "ISCO3D": ["999"],
-    "COUNTRYW": ["99"],
-    "REGIONW": ["00", "99"],
-    "FTPT": ["9"],
-    "REFYEAR": ["9999"],
-    "COUNTRY": ["99"],
-    "REGION": ["00"],
-    "ILOSTAT": ["9"],
-    "EDUC4WN": ["9"],
-    "HATLEV1D": ["9"],
-    "MAINSTAT": ["9"],
-    "INCDECIL": ["99"]
-}
+    "WKSTAT", "SEX", "NACE2_1D", "ISCO08_3D", "COUNTRYW", "REGION_2DW", "FTPT", "REFYEAR",
+    "COUNTRY", "REGION_2D", "DEGURBA", "HHTYPE", "AGE", "ILOSTAT", "EDUC4WEEKS", "HATLEV1D",
+    "MAINSTAT", "INCDECIL", "COEFFY"
+  ] # uses names from 2021 onwards. Old: WSTATOR, NACE1D, ISCO03, REGIONW, REGION, EDUC4WN, COEFF
+
+  na_values:
+    WKSTAT: [ "0", "9", "" ]
+    SEX: [ "0", "9", "" ]
+    NACE2_1D: [ "0", "9", "" ]
+    ISCO08_3D: [ "0", "9", "99", "999", "" ]
+    COUNTRYW: [ "0", "9", "99", "" ]
+    REGION_2DW: [ "9", "99", "" ]
+    FTPT: [ "0", "9", "" ]
+    REFYEAR: [ "0", "9999", "" ]
+    COUNTRY: [ "0", "9", "99", "" ]
+    REGION_2D: [ "9", "99", "" ]
+    ILOSTAT: [ "0", "9", "" ]
+    EDUC4WEEKS: [ "0", "9", "" ]
+    HATLEV1D: [ "0", "9", "" ]
+    MAINSTAT: [ "0", "9", "" ]
+    INCDECIL: [ "0", "9", "99", "" ]
+    AGE: [ "0", "99", "" ]
+
   dtypes_in: {
-    "WSTATOR": "str",
+    "WKSTAT": "str",
     "SEX": "str",
-    "NACE1D": "str",
-    "ISCO3D": "str",
+    "NACE2_1D": "str",
+    "ISCO08_3D": "str",
     "COUNTRYW": "str",
-    "REGIONW": "str",
+    "REGION_2DW": "str",
     "FTPT": "str",
     "REFYEAR": "str",
     "COUNTRY": "str",
-    "REGION": "str",
+    "REGION_2D": "str",
     "DEGURBA": "str",
     "HHTYPE": "str",
     "AGE": "str",
     "ILOSTAT": "str",
-    "EDUC4WN": "str",
+    "EDUC4WEEKS": "str",
     "HATLEV1D": "str",
     "MAINSTAT": "str",
     "INCDECIL": "str",
-    "COEFF": "float"
+    "COEFFY": "float"
 }
   dtypes_out: {
-    "WSTATOR": "category",
+    "WKSTAT": "category",
     "SEX": "category",
-    "NACE1D": "category",
-    "ISCO3D": "category",
+    "NACE2_1D": "category",
+    "ISCO08_3D": "category",
     "COUNTRYW": "category",
-    "REGIONW": "category",
+    "REGION_2DW": "category",
     "FTPT": "category",
-    "REFYEAR": "category",
+    "REFYEAR": "Int64", # prev. category
     "COUNTRY": "category",
-    "REGION": "category",
+    "REGION_2D": "category",
     "DEGURBA": "category",
     "HHTYPE": "category",
-    "AGE": "category",
+    "AGE": "Int64", # prev. category
     "ILOSTAT": "category",
-    "EDUC4WN": "category",
+    "EDUC4WEEKS": "category",
     "HATLEV1D": "category",
     "MAINSTAT": "category",
     "INCDECIL": "category",
-    "COEFF": "float"
+    "COEFFY": "float"
 }
 
 # map parameters (projection, ...)
@@ -105,7 +107,7 @@ visualisation:
   robust_cmap_percentiles: [2, 98]
   cmap: "Greys"
   countries_for_maps: [
-    "AT", "BE", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
+    "AT", "BE", "CH", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR",
     "HU", "IE", "IS", "IT", "LT", "LU", "LV", "NL", "NO", "PT", "RO", "SE",
-    "SI", "SK", "UK"
+    "SI", "SK"
   ]

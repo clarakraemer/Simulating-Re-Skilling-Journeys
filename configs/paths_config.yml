@@ -1,23 +1,21 @@
 # Keys in relative paths are built dynamically
 metadata:
-  relative_paths: ["path_crosswalk", "path_geodata", "path_clsf"]
+  relative_paths: ["path_crosswalk", "path_geodata", "path_clsf", "path_eulfs"]
   absolute_paths: ["path_eulfs"]
 
-# EU-LFS Data
 path_eulfs:
-  raw: "C:\\eurostat_data\\raw"
-  raw_yf: "C:\\eurostat_data\\raw\\Yearly_Data\\YearlyFiles_83_2019\\_YearlyFiles"
-  interim: "C:\\eurostat_data\\interim"
-  processed: "C:\\eurostat_data\\processed"
+  raw: "data/eurostat_data/raw"
+  raw_yf: "data/eurostat_data/raw/Yearly_Data/YearlyFiles_2023"
+  interim: "data/eurostat_data/interim"
+  processed: "data/eurostat_data/processed"
 
-# Note: relative paths need to start one level below the project directory to be parsed correctly
 path_crosswalk:
-  onet_esco: "data\\raw\\mapping-career-causeways\\codebase\\data\\processed\\ESCO_ONET_xwalk_full.csv"
+  onet_esco: "data/raw/mapping-career-causeways/codebase/data/processed/ESCO_ONET_xwalk_full.csv"
 
 path_geodata:
-  nuts_3035: "data\\raw\\geodata\\NUTS_RG_03M_2021_3035.shp"
-  nuts_4326: "data\\raw\\geodata\\NUTS_RG_03M_2021_4326.shp"
+  nuts_3035: "data/raw/geodata/NUTS_RG_03M_2024_3035/NUTS_RG_03M_2024_3035.shp"
+  nuts_4326: "data/raw/geodata/NUTS_RG_03M_2024_4326/NUTS_RG_03M_2024_4326.shp"
 
 path_clsf:
-  nace_1d: "data\\raw\\classifications\\NACE_REV2_1d_section_codes.csv"
-  isco08: "data\\raw\\esco\\{}\\ISCOGroups_en.csv"
+  nace_1d: "data/raw/classifications/NACE_REV2_1d_section_codes.csv"
+  isco08: "data/raw/esco/{}/ISCOGroups_en.csv"
