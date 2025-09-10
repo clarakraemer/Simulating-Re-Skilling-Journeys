@@ -8,6 +8,7 @@ import pickle
 import seaborn as sns
 from matplotlib import colors
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from src import utils, plotting_utils
@@ -2747,6 +2748,9 @@ class ReskillingPathways:
 
         # params
         xmin, xmax, ymin, ymax = bbox_eu_epsg_3035
+        img_ext = "pdf" #NEW
+        mpl.rcParams["pdf.fonttype"] = 42  #NEW, embed TrueType
+        mpl.rcParams["ps.fonttype"] = 42 #NEW
 
         # construct path of in-file
         reg_constraint_str = "regC" if regional_constraint else "no-regC"
@@ -2790,6 +2794,29 @@ class ReskillingPathways:
             df_transition_numbers = df_transition_numbers.infer_objects()
             df_transition_numbers["AGE"] = pd.to_numeric(df_transition_numbers["AGE"])
 
+            # NEW: Vectorized creation of per-step M€ totals
+            # 1) find totals in € (…_sum_step_<s>) and coerce to numeric
+            sum_eur_cols = df_transition_numbers.filter(
+                regex=r"^earnings_delta_closest_switch_sum_step_\d+$"
+            ).columns
+            if len(sum_eur_cols):
+                df_transition_numbers[sum_eur_cols] = df_transition_numbers[sum_eur_cols].apply(
+                    pd.to_numeric, errors="coerce"
+                )
+                # 2) build the entire M€ DataFrame at once and concat once
+                mio_df = (df_transition_numbers[sum_eur_cols] / 1e6).rename(
+                    columns=lambda c: c.replace("_sum_step_", "_sum_mio_step_")
+                )
+                df_transition_numbers = pd.concat([df_transition_numbers, mio_df], axis=1, copy=False)
+
+            # 3) sanity check: do we have the requested step in M€?
+            _needed = f"earnings_delta_closest_switch_sum_mio_step_{step}"
+            if _needed not in df_transition_numbers.columns:
+                raise ValueError(
+                    f"Column '{_needed}' not found. "
+                    f"Available: {sorted(c for c in df_transition_numbers.columns if c.startswith('earnings_delta_closest_switch_sum_mio_step_'))}"
+                )
+
             # select scenario-specific weighting coefficient
             coeffy_weight = self.transition_pool_weights[scenario]
 
@@ -2814,19 +2841,16 @@ class ReskillingPathways:
             # Calculate avg number of transitions per threatened job, sum of earnings
             #  changes, etc.
             # print(df_transition_numbers.columns)
-            # todo: dissect transition category and ranking if we need the info
+            # - per-worker step columns: average
+            # - totals: sum
+            # - everything else: first
             mean_group = df_transition_numbers.columns.str.startswith(
-                ("n_viable_transitions_step", "transition_viable", "AGE")
+                ("n_viable_transitions_step_", "transition_viable", "AGE", "earnings_delta_closest_switch_step_")
             )
             sum_group = df_transition_numbers.columns.str.startswith(
-                ("earnings_delta_closest_switch", "COEFFY", "NOBS")
+                ("earnings_delta_closest_switch_sum_", "earnings_delta_closest_switch_sum_mio_step_", "COEFFY", "NOBS")
             )
-            all = np.repeat(True, df_transition_numbers.shape[1])
-
-            # find rest group: agg = first
-            rest_group = np.logical_and(all, mean_group)
-            rest_group = np.logical_and(rest_group, sum_group)
-            rest_group = np.invert(rest_group)
+            rest_group = ~(mean_group | sum_group)
 
             # define aggregation pools
             cols_mean_group = df_transition_numbers.columns[mean_group]
@@ -2972,53 +2996,55 @@ class ReskillingPathways:
                 )
             )
 
-            # mask countries with missing earnings data
-            cntr_missing = ['IT', 'NL', 'DE', 'HU', 'AT', 'RO', 'PL', 'ES', 'LT', 'SI', 'CY', 'BE', 'CZ', 'HR', 'IS', 'LV']
-            # old ones in 2019: ["AT", "CZ", "ES", "GR", "IS", "NO", "SE", "UK"]
+            # --- PER-WORKER MAP FROM TOTALS ÷ WEIGHT (recommended) ---
+
+            # 1) mask countries with missing earnings data on the *totals* column
+            cntr_missing = ['IT', 'NL', 'DE', 'HU', 'AT', 'RO', 'PL', 'ES', 'LT', 'SI', 'CY', 'BE', 'CZ', 'HR', 'IS',
+                            'LV']
+            tot_col = f"earnings_delta_closest_switch_sum_step_{step}"  # totals in €
+            norm_factor = self.transition_pool_weights[scenario]  # e.g. COEFFY_share_unviable_to_decarbonize
+
             gdf_transition_numbers_by_nuts.loc[
                 gdf_transition_numbers_by_nuts["CNTR_CODE"].isin(cntr_missing),
-                "earnings_delta_closest_switch_step_{}".format(step),
+                tot_col
             ] = np.nan
 
-            # TODO: emergency normalise the earnings data to per-worker levels
-            # per worker
-            earnings_cols_rel = gdf_transition_numbers_by_nuts.columns[gdf_transition_numbers_by_nuts.columns.str.startswith(
-                "earnings_delta_closest_switch_step")].values
+            # 2) compute weighted per-worker (= totals / weight_sum)
+            per_worker_col = f"earnings_delta_per_worker_step_{step}"  # new column name
+            gdf_transition_numbers_by_nuts[per_worker_col] = (
+                    gdf_transition_numbers_by_nuts[tot_col]
+                    / gdf_transition_numbers_by_nuts[norm_factor]
+            )
 
-            # Re-mask income data for countries that don’t report data (!)
-            gdf_transition_numbers_by_nuts.loc[gdf_transition_numbers_by_nuts["CNTR_CODE"].isin(
-                cntr_missing), earnings_cols_rel] = np.nan
+            # 2b) guard against zero/neg weights → NaN, and drop infs
+            zero_w = gdf_transition_numbers_by_nuts[norm_factor] <= 0
+            gdf_transition_numbers_by_nuts.loc[zero_w, per_worker_col] = np.nan
+            gdf_transition_numbers_by_nuts[per_worker_col] = (
+                gdf_transition_numbers_by_nuts[per_worker_col]
+                .replace([np.inf, -np.inf], np.nan)
+            )
 
-            # NOTE: can back-calculate from region-sector pairs because I also sum up all COEFFY's in the reskilling simulations
-            #norm_factor = "COEFFY_share_brown_slt" # OLD
-            norm_factor = self.transition_pool_weights[scenario]
-            for col in earnings_cols_rel:
-                gdf_transition_numbers_by_nuts[col] = (
-                        gdf_transition_numbers_by_nuts[col] / gdf_transition_numbers_by_nuts[norm_factor]
-                )
-
-            # cmap
+            # 3) color scale (€, not M€)
             if dynamic_wages_cmap:
                 vmax_wages = (
-                    gdf_transition_numbers_by_nuts[
-                        "earnings_delta_closest_switch_step_{}".format(step)
-                    ]
-                    .abs()
-                    .quantile(q=0.98)
+                    gdf_transition_numbers_by_nuts[per_worker_col]
+                    .abs().quantile(0.98)
                 )
-            cmap_earnings = plt.get_cmap("coolwarm_r", (vmax_wages / 1000) * 4)
+
+            # keep your colormap construction
+            cmap_earnings = plt.get_cmap("coolwarm_r", max(4, int((vmax_wages / 1000) * 4)))
             cmap_earnings.set_over("darkblue")
             cmap_earnings.set_under("darkred")
 
-            # ax2: earnings losses
+            # 4) ax2: earnings per worker map (weighted)
             gdf_transition_numbers_by_nuts.plot(
-                column="earnings_delta_closest_switch_step_{}".format(step),
+                column=per_worker_col,
                 legend=True,
                 cmap=cmap_earnings,
                 vmin=-vmax_wages,
                 vmax=vmax_wages,
                 legend_kwds={
-                    "label": "$\Delta$ Annual earnings (€)",
+                    "label": "$\\Delta$ Annual earnings per worker (€)",
                     "fraction": cbar_fraction,
                     "extend": "both",
                 },
@@ -3045,12 +3071,11 @@ class ReskillingPathways:
                     axis=1,
                 )
 
+            eu_total_mio = gdf_transition_numbers_by_nuts[
+                f"earnings_delta_closest_switch_sum_mio_step_{step}"
+            ].sum()
             ax2.set_title(
-                "$Total = {:.2f}~M€~(2023)$".format(
-                    gdf_transition_numbers_by_nuts[
-                        "earnings_delta_closest_switch_step_{}".format(step)
-                    ].sum()
-                )
+                "$Total = {:.2f}~M€~(2023)$".format(eu_total_mio)
             )
 
             # EU BBOX
@@ -3069,17 +3094,13 @@ class ReskillingPathways:
             if show_map_boxplots:
                 # ax3: distribution across regions (transitions)
                 sns.boxplot(
-                    x=gdf_transition_numbers_by_nuts[
-                        "n_viable_transitions_step_{}".format(step)
-                    ],
+                    x=gdf_transition_numbers_by_nuts[f"n_viable_transitions_step_{step}"],
                     ax=ax3,
                 )
 
-                # ax4: distribution across regions (earnings)
+                # ax4: distribution across regions (earnings) # NEW: (earnings per worker)
                 sns.boxplot(
-                    x=gdf_transition_numbers_by_nuts[
-                        "earnings_delta_closest_switch_step_{}".format(step)
-                    ],
+                    x=gdf_transition_numbers_by_nuts[per_worker_col],
                     ax=ax4,
                 )
 
@@ -3103,16 +3124,11 @@ class ReskillingPathways:
             fig.subplots_adjust(top=1.4)
 
             fname = "{}_{}_{}_{}_step_{}.{}".format(
-                "EU", year, "regional", scenario, step, "png"
+                "EU", year, "regional", scenario, step, img_ext
             )
             plt.savefig(
-                os.path.join(
-                    base_dir,
-                    dirname,
-                    fname,
-                ),
-                dpi=300,
-                bbox_inches="tight",
+                os.path.join(base_dir, dirname, fname),
+                bbox_inches="tight",  # dpi not needed for vector PDFs
             )
 
             if not show_plots:
@@ -3261,16 +3277,11 @@ class ReskillingPathways:
                     sns.despine()
 
                     # save
-                    fname = "{}_{}_{}_{}_{}_step_{}.png".format(
-                        "EU", year, "sectoral", fname_snippet, scenario, step
+                    fname = "{}_{}_{}_{}_{}_step_{}.{}".format(
+                        "EU", year, "sectoral", fname_snippet, scenario, step, img_ext
                     )
                     plt.savefig(
-                        os.path.join(
-                            base_dir,
-                            dirname,
-                            fname,
-                        ),
-                        dpi=300,
+                        os.path.join(base_dir, dirname, fname),
                         bbox_inches="tight",
                     )
             else:
@@ -3353,16 +3364,11 @@ class ReskillingPathways:
                 sns.despine()
 
                 # save
-                fname = "{}_{}_{}_{}_{}_step_{}.png".format(
-                    "EU", year, "sectoral", fname_snippet, scenario, step
+                fname = "{}_{}_{}_{}_{}_step_{}.{}".format(
+                    "EU", year, "sectoral", fname_snippet, scenario, step, img_ext
                 )
                 plt.savefig(
-                    os.path.join(
-                        base_dir,
-                        dirname,
-                        fname,
-                    ),
-                    dpi=300,
+                    os.path.join(base_dir, dirname, fname),
                     bbox_inches="tight",
                 )
 
@@ -3501,11 +3507,11 @@ if __name__ == "__main__":
 
     # reskilling options to consider
     reskilling_modes = [
-        #"optimal",
+        "optimal",
         #"coreness_weighted",
         "coreness_ranked",
-        #"digital",
-        #"green",
+        "digital",
+        "green",
     ]
 
     # optimisation target for job transitions
