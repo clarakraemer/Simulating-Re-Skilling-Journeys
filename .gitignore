@@ -21,3 +21,5 @@ notebooks/**/.ipynb_checkpoints/
 # Build / misc
 dist/
 build/
+/data/
+/results/
