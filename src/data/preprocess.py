@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
-from src.data.lfs import EulfsDs
-from src.data.framework import Esco
+from data.lfs import EulfsDs
+from data.framework import Esco
 
 
 # note: need to uncomment click commands for CLI usage

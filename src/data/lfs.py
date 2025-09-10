@@ -1,11 +1,12 @@
 import os
+import warnings
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 
 import src
 from src import UsefulPaths, utils
-from src.data.framework import Esco, Classifications
+from data.framework import Esco, Classifications
 
 useful_paths = src.UsefulPaths()
 
@@ -16,10 +17,7 @@ class EuLfs(UsefulPaths):
     def __init__(
         self,
         config=None,
-        path_eulfs_raw=None,
-        path_eulfs_raw_yf=None,
-        path_eulfs_interim=None,
-        path_eulfs_processed=None,
+        useful_paths=None,
         fmt_folder=None,
         fmt_file=None,
         years=None,
@@ -82,35 +80,32 @@ class EuLfs(UsefulPaths):
             Dtypes in which each variable specified in 'variables' should be saved.
         """
         # inherit path structure
-        UsefulPaths.__init__(self=self)
+        if useful_paths is not None:
+            self.__dict__.update(useful_paths.__dict__)
+        else:
+            from src import utils
+            self.useful_paths = utils.UsefulPaths(fn_config_path="paths_config.yml")
+            self.__dict__.update(self.useful_paths.__dict__)
 
-        # config file
-        self.config = config if config is not None else None
+        # config
+        if config is not None:
+            self.config = config
+        else:
+            from src import utils
+            self.config = utils.load_config(os.path.join(self.config_dir, "eu_lfs_config.yml"))
 
-        # paths
-        self.path_eulfs_raw = (
-            path_eulfs_raw
-            if path_eulfs_raw is not None
-            else self.config["paths"]["raw"]
+        # load NUTS
+        import geopandas as gpd
+        nuts_dir = os.path.join(self.data_raw, "geodata")
+        gdf_4326 = gpd.read_file(
+            os.path.join(self.data_raw, "geodata",
+                         "NUTS_RG_03M_2024_4326", "NUTS_RG_03M_2024_4326.shp")
         )
-
-        self.path_eulfs_raw_yf = (
-            path_eulfs_raw_yf
-            if path_eulfs_raw_yf is not None
-            else self.config["paths"]["raw_yf"]
+        gdf_3035 = gpd.read_file(
+            os.path.join(self.data_raw, "geodata",
+                         "NUTS_RG_03M_2024_3035", "NUTS_RG_03M_2024_3035.shp")
         )
-
-        self.path_eulfs_interim = (
-            path_eulfs_interim
-            if path_eulfs_interim is not None
-            else self.config["paths"]["interim"]
-        )
-
-        self.path_eulfs_processed = (
-            path_eulfs_processed
-            if path_eulfs_processed is not None
-            else self.config["paths"]["processed"]
-        )
+        self.gdf_nuts = {"4326": gdf_4326, "3035": gdf_3035}
 
         # formatting strings
         self.fmt_folder = (
@@ -257,7 +252,7 @@ class EuLfs(UsefulPaths):
         isco_colname_all_digits : str
             Column name where zero-stripped ISCO codes should be stored (1/2/3 digits).
             For example: in the original data set, countries such as BG or PL report
-            the 2-digit ISCO-08 group 14 as 140 in the variable ISCO3D. This new column
+            the 2-digit ISCO-08 group 14 as 140 in the variable ISCO08_3D. This new column
             can be used to filter for certain granularities, e.g. ISCO-08 3-digit only.
         return_filtering_stats : Boolean
             If True, a filtering summary is returned.
@@ -275,26 +270,57 @@ class EuLfs(UsefulPaths):
             dtype=dtypes_in if dtypes_in is not None else self.dtypes_in,
         )
 
-        # apply scaling factor to COEFF
-        df_cy["COEFF"] *= self.scaling_factor_coeff
+        df_cy[["WKSTAT", "ILOSTAT"]] = df_cy[["WKSTAT", "ILOSTAT"]].astype(str)
+
+        # OCCUPATION HARMONISATION
+        # helper – keep only columns that are present in the file
+        def _cols_present(wanted_cols):
+            return [c for c in wanted_cols if c in df_cy.columns]
+        # 1) enforce string dtype on whichever ISCO columns exist
+        for col in _cols_present(["ISCO08_3D", "ISCO08_2D", "ISCO08_1D"]):
+            df_cy[col] = df_cy[col].astype(str).str.strip()
+        # 2) replace blank / dot with NaN in the columns that exist
+        for col in _cols_present(["ISCO08_3D"]):  # 3D only
+            df_cy[col] = df_cy[col].replace({"": np.nan, ".": np.nan, "nan": np.nan})
+        # 3) primary occupation
+        df_cy["ISCO_MAIN"] = df_cy.get("ISCO08_3D", pd.Series(np.nan, index=df_cy.index))
+        # 4) if still all NaN (e.g. NL employed rows) try 2- or 1-digit
+        if df_cy["ISCO_MAIN"].isna().all():
+            for alt in _cols_present(["ISCO08_2D", "ISCO08_1D"]):
+                if df_cy[alt].notna().any():
+                    df_cy["ISCO_MAIN"] = df_cy[alt].str.zfill(3)
+                    break
+        # 5) turn remaining NaN into '999' so rows are not dropped later
+        df_cy["ISCO_MAIN"] = df_cy["ISCO_MAIN"].fillna("999")
+
+        # apply scaling factor to COEFFY
+        df_cy["COEFFY"] *= self.scaling_factor_coeff
 
         # define filtering conditions
-        cond_coeff_is_not_zero = ~np.isclose(df_cy["COEFF"], 0)
-        cond_is_working = df_cy.WSTATOR.isin(["1", "2"])  # beschäftigt
-        cond_private_household = df_cy.HHTYPE.isin(["1"])  # privater wohnraum
-        cond_has_isco_code = df_cy.ISCO3D.notna()  # isco classified
-        cond_not_inactive = df_cy.ILOSTAT.isin(["1", "2"])  # inaktiv
-
-        # spare out military sector (across 1-3 digits)
-        cond_military = ~df_cy.ISCO3D.isin(
-            ["000", "010", "011", "020", "021", "030", "031"]
+        cond_coeff_is_not_zero = ~np.isclose(df_cy["COEFFY"], 0)
+        cond_private_household = df_cy["HHTYPE"].str.startswith("1")
+        cond_has_isco_code = (
+                df_cy["ISCO_MAIN"].notna()
+                & (df_cy["ISCO_MAIN"] != "999")
         )
+        cond_active = (df_cy["ILOSTAT"] == "1")
 
-        # exclude cross-border commuters
-        if country == "MT":
-            # special case for malta
-            df_cy.COUNTRYW = df_cy.COUNTRYW.replace("000-OWN COUNTRY", "MT")
-        cond_in_country = df_cy.COUNTRYW.isin([country])
+        # harmonize COUNTRYW and treat commuters
+        df_cy["COUNTRYW"] = (
+            df_cy["COUNTRYW"]
+            .replace("000-OWN COUNTRY", country)  # turn dummy into ISO-2
+            .str.strip()
+            .str[:2]
+        )
+        # tag cross-border commuters (True ⇔ workplace abroad)
+        df_cy["is_cross_border"] = df_cy["COUNTRYW"] != country
+        # master switch – set to True when you want to KEEP commuters
+        KEEP_COMMUTERS = True  # ← flip to False for the old behaviour
+        # build the filter that is later used in df_sub = df_cy.loc[…]
+        if KEEP_COMMUTERS:
+            cond_in_country = np.ones(len(df_cy), dtype=bool)  # always True
+        else:
+            cond_in_country = ~df_cy["is_cross_border"]  # old logic
 
         # remove obs over retirement age
         # (77 is the center of the 75-79 age band)
@@ -303,43 +329,62 @@ class EuLfs(UsefulPaths):
         # filter subset
         df_sub = df_cy.loc[
             cond_coeff_is_not_zero
-            & cond_is_working
             & cond_private_household
-            & cond_not_inactive
+            & cond_active
             & cond_in_country
             & cond_has_isco_code
             & cond_age
-            & cond_military
         ]
 
         # copy
         df_sub = df_sub.copy()
 
-        # set NUTS code
-        if country in self.countries_nuts_1d:
-            # NUTS 1 only
-            nuts_id = df_sub["COUNTRYW"] + df_sub["REGIONW"].str[:1]
-        elif country in self.countries_nuts_0d:
-            # NUTS 0 only
-            nuts_id = df_sub["COUNTRYW"]
-        else:
-            # NUTS 2
-            nuts_id = df_sub["COUNTRYW"] + df_sub["REGIONW"]
+        #   Handle countries that report only NUTS-0 or NUTS-1
+        if not hasattr(self, "_valid_nuts"):
+            # choose whichever CRS you actually loaded into self.gdf_nuts
+            crs_key = "3035" if "3035" in self.gdf_nuts else "4326"
+            nuts_all = self.gdf_nuts[crs_key]  # GeoDataFrame
 
-        df_sub["NUTS_ID"] = nuts_id
-
+            self._valid_nuts = {
+                0: nuts_all.loc[nuts_all.LEVL_CODE == 0, "NUTS_ID"].unique().tolist(),
+                1: nuts_all.loc[nuts_all.LEVL_CODE == 1, "NUTS_ID"].unique().tolist(),
+                2: nuts_all.loc[nuts_all.LEVL_CODE == 2, "NUTS_ID"].unique().tolist(),
+            }
+        if country in self.countries_nuts_0d:  # national-only reporters
+            wanted_lvl = 0
+            cand_nuts = df_sub["COUNTRYW"]
+        elif country in self.countries_nuts_1d:  # NUTS-1 reporters
+            wanted_lvl = 1
+            cand_nuts = df_sub["COUNTRYW"] + df_sub["REGION_2DW"].astype(str).str[:1]
+        else:  # regular NUTS-2 reporters
+            wanted_lvl = 2
+            cand_nuts = (df_sub["COUNTRYW"] +
+                         df_sub["REGION_2DW"].astype(str).str.zfill(2))
+        bad_region = df_sub["REGION_2DW"].isin(["", "99", np.nan])
+        valid_code = cand_nuts.isin(self._valid_nuts[wanted_lvl])
+        obsolete_mask = (~valid_code) & (~bad_region)  # real junk
+        n_obsolete = int(obsolete_mask.sum())
+        if n_obsolete:
+            warnings.warn(f"{country}-{year}: dropping {n_obsolete} obsolete "
+                          f"NUTS{wanted_lvl} codes")
+        # drop the junk rows completely
+        df_sub = df_sub.loc[~obsolete_mask].copy()
+        # final NUTS_ID column: NaN if  “99 / blank” or otherwise unmatched
+        df_sub["NUTS_ID"] = cand_nuts.where(valid_code & ~bad_region)
         # assign new ISCO column to differentiate 1D, 2D & 3D codes
+        df_sub[isco_colname_all_digits] = df_sub["ISCO08_3D"]
         if country in self.countries_isco08_2d:
             # 2D
-            if df_sub["ISCO3D"].str.endswith("0").all():
-                df_sub[isco_colname_all_digits] = df_sub["ISCO3D"].str[:2]
+            if df_sub["ISCO08_3D"].str.endswith("0").all():
+                df_sub[isco_colname_all_digits] = df_sub["ISCO08_3D"].str[:2]
         elif country in self.countries_isco08_1d:
             # 1D
-            if df_sub["ISCO3D"].str.endswith("00").all():
-                df_sub[isco_colname_all_digits] = df_sub["ISCO3D"].str[:1]
+            if df_sub["ISCO08_3D"].str.endswith("00").all():
+                df_sub[isco_colname_all_digits] = df_sub["ISCO08_3D"].str[:1]
         else:
             # 3D
-            df_sub[isco_colname_all_digits] = df_sub["ISCO3D"]
+            df_sub[isco_colname_all_digits] = df_sub["ISCO08_3D"]
+        print(f"Kept rows after all filters: {len(df_sub)}")
 
         # summary stats
         filtering_stats = {
@@ -467,7 +512,7 @@ class EuLfs(UsefulPaths):
     def read_preprocessed_file(
         self,
         year=None,
-        input_fname_lfs="eu_lfs_merged_{year}",
+        input_fname_lfs = "eu_lfs_merged_2023",
         optional_input_dir=None,
         ffmt="pkl",
     ):
@@ -507,8 +552,15 @@ class EuLfs(UsefulPaths):
         # read depending on file type
         if ffmt == "pkl":
             df_out = pd.read_pickle(fpath)
+        elif ffmt == "csv":
+            df_out = pd.read_csv(
+                fpath,
+                index_col=0,
+                dtype=self.dtypes_out,  # << use your clean dtypes_out
+                low_memory=False
+            )
         else:
-            df_out = pd.read_csv(fpath, index_col=0)
+            raise ValueError(f"Unsupported file format: {ffmt}")
         return df_out
 
     def join_covariates(
@@ -521,8 +573,8 @@ class EuLfs(UsefulPaths):
         isco_join_col_eulfs="ISCO",
         isco_join_col_covariates="isco_code",
         isco_covariate_selection=None,
-        nace_join_col_eulfs="NACE1D",
-        nace_join_col_covariates="NACE1D",
+        nace_join_col_eulfs="NACE2_1D",
+        nace_join_col_covariates="NACE2_1D",
         nace_covariate_selection=None,
         multiply_by_coeff_if_starts_with="share",
         save_file=True,
@@ -556,9 +608,9 @@ class EuLfs(UsefulPaths):
         isco_covariate_selection : list of str
             Selection of covariates that should be joined by ISCO code.
         nace_join_col_eulfs : str
-            Name of NACE join column in EU-LFS data set. Defaults to "NACE1D".
+            Name of NACE join column in EU-LFS data set. Defaults to "NACE2_1D".
         nace_join_col_covariates : str
-            Name of join column in NACE covariates data set. Defaults to "NACE1D".
+            Name of join column in NACE covariates data set. Defaults to "NACE2_1D".
         nace_covariate_selection : list of str
             Selection of covariates that should be joined by NACE code.
         multiply_by_coeff_if_starts_with : str
@@ -628,8 +680,8 @@ class EuLfs(UsefulPaths):
             ].values.tolist()
 
             for col_name in share_cols:
-                col_name_new = "COEFF_{}".format(col_name)
-                df_merged[col_name_new] = df_merged[col_name] * df_merged["COEFF"]
+                col_name_new = "COEFFY_{}".format(col_name)
+                df_merged[col_name_new] = df_merged[col_name] * df_merged["COEFFY"]
 
         # sort cols alphabetically
         df_merged = utils.sort_columns(df_merged)
@@ -719,7 +771,7 @@ class EuLfs(UsefulPaths):
         n_digits_isco=3,
         input_fname="eu_lfs_merged_{year}_with_covariates",
         optional_input_dir=None,
-        div_agg_vars_by="COEFF",
+        div_agg_vars_by="COEFFY",
         save_file=True,
         output_fname="eulfs_{year}_by_{by}",
         output_dirname="eulfs",
@@ -738,7 +790,7 @@ class EuLfs(UsefulPaths):
         agg_dict : dict
             Dictionary of variable - aggregation function pairs. Only variables
             included in this dict will be aggregated.
-            Example: {"COEFF": np.sum}
+            Example: {"COEFFY": np.sum}
         n_digits_isco : int
             Restrict to those observations coded at specified number of ISCO-08 digits.
             Defaults to 3 digits, which excludes Bulgaria, Malta and Poland, as well as
@@ -748,7 +800,7 @@ class EuLfs(UsefulPaths):
             File name of data set. Formatting string needs to include a 'year' formatter.
         optional_input_dir : str
             Optionally override default folder.
-        div_agg_vars_by : str (defaults to "COEFF")
+        div_agg_vars_by : str (defaults to "COEFFY")
             Optionally divide all aggregated variables by given variable. Defaults to
             COEFF, thus yielding relative employment shares at the aggregated level.
         save_file : Boolean
@@ -843,6 +895,14 @@ class LmData(UsefulPaths):
 
         # read relevant data across 3 dimensions: industry, occupation, region
         self.df_nace = self._read_nace()
+
+        nuts_fp = os.path.join(
+            self.data_raw,  # comes from UsefulPaths
+            "geodata",
+            "NUTS_RG_03M_2021_4326",  # FOLDER (no _LEVL_x suffix)
+            "NUTS_RG_03M_2021_4326.shp"  # FILE   (multi-level shapefile)
+        )
+
         self.gdf_nuts = self._read_nuts()
 
     def _read_nace(self):
@@ -911,98 +971,6 @@ class EulfsDs(LmData, Esco):
         list_of_dfs = []
         summary_stats = {}
 
-        for year in self.years:
-            print(year)
-            for country in self.countries:
-                # todo: remove/add [:1] above after/before testing
-                print(country)
-                # define fpath
-                folder = self.fmt_folder.format(country)
-                file = self.fmt_file.format(country, year)
-                fpath_full = os.path.join(self.path_eulfs_raw_yf, folder, file)
-
-                # read raw data
-                df_cy = pd.read_csv(
-                    fpath_full,
-                    usecols=self.variables,
-                    na_values=self.na_values,
-                    # categories make more sense to deal with na values
-                    dtype=self.dtypes_in,
-                )
-
-                # apply scaling factor to COEFF
-                df_cy["COEFF"] *= self.scaling_factor_coeff
-
-                # define filtering conditions
-                cond_coeff_is_not_zero = ~np.isclose(df_cy["COEFF"], 0)
-                cond_is_working = df_cy.WSTATOR.isin(["1", "2"])  # beschäftigt
-                cond_private_household = df_cy.HHTYPE.isin(["1"])  # privater wohnraum
-                cond_has_isco_code = df_cy.ISCO3D.notna()
-                cond_not_inactive = df_cy.ILOSTAT.isin(["1", "2"])  # inaktiv
-
-                # exclude cross-border commuters
-                if country == "MT":
-                    # special case for malta
-                    df_cy.COUNTRYW = df_cy.COUNTRYW.replace("000-OWN COUNTRY", "MT")
-                cond_in_country = df_cy.COUNTRYW.isin([country])
-
-                # remove obs over retirement age
-                # (77 is the center of the 75-79 age band)
-                cond_age = ~df_cy.AGE.isin(self.pension_age)
-
-                # spare out military sector
-                # cond_military = ~df_cy.ISCO3D.isin(["011", "021", "031"])
-
-                # filter subset
-                df_sub = df_cy.loc[
-                    cond_coeff_is_not_zero
-                    & cond_is_working
-                    & cond_private_household
-                    & cond_not_inactive
-                    & cond_in_country
-                    & cond_has_isco_code
-                    & cond_age
-                ]
-
-                # copy
-                df_sub = df_sub.copy()
-
-                # set NUTS code
-                if country in self.countries_nuts_1d:
-                    # NUTS 1 only
-                    nuts_id = df_sub["COUNTRYW"] + df_sub["REGIONW"].str[:1]
-                elif country in self.countries_nuts_0d:
-                    # NUTS 0 only
-                    nuts_id = df_sub["COUNTRYW"]
-                else:
-                    # NUTS 2
-                    nuts_id = df_sub["COUNTRYW"] + df_sub["REGIONW"]
-
-                df_sub["NUTS_ID"] = nuts_id
-
-                # assign new ISCO column to differentiate 1D, 2D & 3D codes
-                if country in self.countries_isco08_2d:
-                    # 2D
-                    if df_sub["ISCO3D"].str.endswith("0").all():
-                        df_sub[self.isco_join_col_eulfs] = df_sub["ISCO3D"].str[:2]
-                elif country in self.countries_isco08_1d:
-                    # 1D
-                    if df_sub["ISCO3D"].str.endswith("00").all():
-                        df_sub[self.isco_join_col_eulfs] = df_sub["ISCO3D"].str[:1]
-                else:
-                    # 3D
-                    df_sub[self.isco_join_col_eulfs] = df_sub["ISCO3D"]
-
-                # append clean df
-                list_of_dfs.append(df_sub)
-
-                # populate summary stats
-                summary_stats["{}_{}".format(country, year)] = {
-                    "n_obs_before": len(df_cy),
-                    "n_obs_after": len(df_sub),
-                    "ratio": len(df_sub) / len(df_cy),
-                }
-
         # 1) Combine country-level data
         df_merged = pd.concat(list_of_dfs, axis=0).reset_index(drop=True)
 
@@ -1037,9 +1005,9 @@ class EulfsDs(LmData, Esco):
         ].values.tolist()
 
         for col_name in share_cols:
-            col_name_new = "COEFF_{}".format(col_name)
+            col_name_new = "COEFFY_{}".format(col_name)
             df_merged_all_vars[col_name_new] = (
-                df_merged_all_vars[col_name] * df_merged_all_vars["COEFF"]
+                df_merged_all_vars[col_name] * df_merged_all_vars["COEFFY"]
             )
 
         # note: missing values remain (subsistence agriculture: 631, 632, 633)
@@ -1087,7 +1055,7 @@ class EulfsDs(LmData, Esco):
 
 
 if __name__ == "__main__":
-    from src.data.framework import Classifications, Onet
+    from data.framework import Classifications, Onet
 
     # load data classes
     classifications = Classifications()
@@ -1148,31 +1116,31 @@ if __name__ == "__main__":
 
     # aggregate
     agg_dict = {
-        "COEFF": np.sum,
-        "COEFF_share_green_esco_mean": np.sum,
-        "COEFF_share_brown_esco_mean": np.sum,
-        "COEFF_share_neutral_esco_mean": np.sum,
-        "COEFF_share_green_gtp_mean": np.sum,
-        "COEFF_share_green_gilli2020": np.sum,
+        "COEFFY": np.sum,
+        "COEFFY_share_green_esco_mean": np.sum,
+        "COEFFY_share_brown_esco_mean": np.sum,
+        "COEFFY_share_neutral_esco_mean": np.sum,
+        "COEFFY_share_green_gtp_mean": np.sum,
+        "COEFFY_share_green_gilli2020": np.sum,
     }
 
     # by 1-digit industry
     lfs.aggregate(
-        year=2019, group_by=["NACE1D_label"], agg_dict=agg_dict, n_digits_isco=3
+        year=2023, group_by=["NACE2_1D_label"], agg_dict=agg_dict, n_digits_isco=3
     )
 
     # by 1-digit industry and country
     lfs.aggregate(
-        year=2019,
-        group_by=["NACE1D_label", "COUNTRYW"],
+        year=2023,
+        group_by=["NACE2_1D_label", "COUNTRYW"],
         agg_dict=agg_dict,
         n_digits_isco=3,
     )
 
     # by nuts-2 regions and 1-digit industries
     lfs.aggregate(
-        year=2019,
-        group_by=["NUTS_ID", "NACE1D_label"],
+        year=2023,
+        group_by=["NUTS_ID", "NACE2_1D_label"],
         agg_dict=agg_dict,
         n_digits_isco=3,
     )

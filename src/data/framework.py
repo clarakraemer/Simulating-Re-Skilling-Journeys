@@ -1899,107 +1899,68 @@ class Esco(UsefulPaths):
 
         return df_out
 
-    # todo: implement reading weighted 3D shares
+    # NEW: reads Zaussinger et al. (2025) classification, but only unweighted
     def read_gbn_classification(self, agg_to_isco_at_digit=None, version="unweighted"):
 
         # ESCO-level
         if agg_to_isco_at_digit is None and version == "unweighted":
-            # read final lists
-            df_sl = pd.read_csv(
-                os.path.join(
-                    self.data_processed,
-                    "esco",
-                    "esco_level_gbn_classification_short_lists.csv",
-                ),
-                index_col=0,
-            )
 
-            df_sl_tobi = pd.read_csv(
-                os.path.join(
-                    self.data_processed,
-                    "esco",
-                    "esco_level_gbn_classification_short_lists_tobi.csv",
-                ),
-                index_col=0,
+            # load the Zaussinger et al. (2025) classification
+            path = os.path.join(
+                self.data_processed, "esco",
+                "ZaussingerSchmidtEgli2025_OccupationClassificationESCOv1.1.csv"
             )
+            df_classification = pd.read_csv(
+                path,
+                usecols=["iscoGroup", "preferredLabel", "occupation_category"]
+            )
+            df_classification = df_classification.rename(columns={
+                "iscoGroup": "isco_code",
+                "preferredLabel": "preferredLabel_isco",
+                "occupation_category": "category",
+            })
 
             # get esco-isco mapping
             esco_to_isco = self.attach_isco_to_occupations(self.occupations)
 
             # merge mapping to lists
-            df_sl_merged = df_sl.merge(
+            gbn_classification_merged = df_classification.merge(
                 esco_to_isco, on="conceptUri", how="left"
             ).rename(
                 columns={
-                    "gbn_classification_short_list": "classification",
+                    "occupation_category": "classification",
                     "preferredLabel_x": "preferredLabel",
                 }
-            )
-            df_sl_tobi_merged = df_sl_tobi.merge(
-                esco_to_isco, on="conceptUri", how="left"
-            ).rename(columns={"gbn_classification_short_list": "classification"})
-
-            # combine both list version
-            gbn_classification_merged = pd.merge(
-                df_sl_merged[
-                    [
-                        "conceptUri",
-                        "preferredLabel",
-                        "classification",
-                        "isco_level_4",
-                        "isco_level_3",
-                        "isco_level_2",
-                        "isco_level_1",
-                    ]
-                ],
-                df_sl_tobi_merged[["conceptUri", "classification"]],
-                on="conceptUri",
-                how="left",
-                suffixes=("_sl", "_slt"),
             )
 
             return gbn_classification_merged.drop_duplicates().reset_index(drop=True)
 
         # ISCO-level
         elif agg_to_isco_at_digit is not None and version == "unweighted":
-            gbn_shares_no_wt = pd.read_pickle(
+            df_shares = pd.read_pickle(
                 os.path.join(
                     self.data_processed,
                     "esco",
-                    "final_gbn_shares_by_isco_unweighted.pkl",
+                    "final_gbn_shares_by_isco_unweighted_new.pkl",
                 )
             )
 
-            # select specified ISCO level
-            gbn_shares_no_wt_sl = gbn_shares_no_wt.query(
-                "isco_level == {} & list_version == 'short_list'".format(
-                    agg_to_isco_at_digit
-                )
-            )
-            gbn_shares_no_wt_slt = gbn_shares_no_wt.query(
-                "isco_level == {} & list_version == 'short_list_tobi'".format(
-                    agg_to_isco_at_digit
-                )
-            )
+            # keep only rows at the requested level
+            df_level = df_shares.loc[df_shares["isco_level"] == agg_to_isco_at_digit]
 
-            # combine both list version
-            gbn_shares_no_wt_isco = pd.merge(
-                gbn_shares_no_wt_sl[
-                    [
-                        "isco_code",
-                        "preferredLabel_isco",
-                        "share_green",
-                        "share_brown",
-                        "share_neutral",
-                    ]
-                ],
-                gbn_shares_no_wt_slt[["isco_code", "share_brown", "share_neutral"]],
-                on="isco_code",
-                how="left",
-                suffixes=("_sl", "_slt"),
-            )
+            # select columns for simulation
+            cols = [
+                "isco_code",
+                "preferredLabel_isco",
+                "share_low-carbon",
+                "share_neutral",
+                "share_viable-to-decarbonize",
+                "share_unviable-to-decarbonize",
+                "share_high-carbon",
+            ]
+            gbn_shares_no_wt_isco = df_level[cols].copy()
+
             return gbn_shares_no_wt_isco
-
 
 class Classifications(UsefulPaths):
     def __init__(self):
