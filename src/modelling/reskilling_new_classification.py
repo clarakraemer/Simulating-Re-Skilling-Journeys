@@ -3527,7 +3527,7 @@ if __name__ == "__main__":
     shortcuts = ["thresh-viable-isco4d-v2"]  # ["thresh-low", "thresh-perc", "thresh-emp"]
 
     # consideration of regional mobility constraints
-    regional_constraints = [True, False] # [True, False]
+    regional_constraints = [False] # [True, False]
 
     # length of reskilling journey
     reskilling_journey_length = 20
