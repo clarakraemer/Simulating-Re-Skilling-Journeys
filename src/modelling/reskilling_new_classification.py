@@ -3503,7 +3503,7 @@ if __name__ == "__main__":
     ]
 
     # transition pools to analyse
-    scenarios = ["at_risk"]  # ["at_risk", "high_carbon", "shortage"]
+    scenarios = ["shortage"]  # ["at_risk", "high_carbon", "shortage"]
 
     # reskilling options to consider
     reskilling_modes = [
@@ -3527,10 +3527,10 @@ if __name__ == "__main__":
     shortcuts = ["thresh-viable-isco4d-v2"]  # ["thresh-low", "thresh-perc", "thresh-emp"]
 
     # consideration of regional mobility constraints
-    regional_constraints = [False] # [True, False]
+    regional_constraints = [True, False] # [True, False]
 
     # length of reskilling journey
-    reskilling_journey_length = 20
+    reskilling_journey_length = 30
     steps = np.arange(0, reskilling_journey_length + 1)
 
     # name mapping
@@ -3542,70 +3542,82 @@ if __name__ == "__main__":
     start = timeit.default_timer()
     for transition_threshold, shortcut in processing_dict.items():
 
-        # results storage
-        results_dir = os.path.join(
-            useful_paths.figure_dir, "reskilling_simulation"
-        )
+        # map scenario names to a clean folder suffix (no spaces, no weird chars)
+        SCENARIO_SUFFIX = {
+            "shortage": "shortage",
+            "at_risk": "at_risk",
+            "high_carbon": "highcarbon",  # no underscore to keep it short/portable
+        }
 
-        for regional_constraint in regional_constraints:
-            # run simulations for each reskilling mode
+        for scenario in scenarios:
+            # 1) Build a scenario-specific base results dir
+            scenario_tag = SCENARIO_SUFFIX.get(scenario, str(scenario))
+            results_dir = os.path.join(
+                useful_paths.figure_dir,
+                "reskilling_simulation",
+                scenario_tag,
+            )
+            os.makedirs(results_dir, exist_ok=True)
+            print(f"[OUT] scenario '{scenario}' → {results_dir}")
 
-            for reskilling_mode in reskilling_modes:
+            for regional_constraint in regional_constraints:
+                # run simulations for each reskilling mode
+                for reskilling_mode in reskilling_modes:
 
-                # 1) Build the dirname & pickle filename exactly as simulate_regional does
-                dirname = rp.dirname_out_reg.format(
-                    sim_version=rp.simulation_name[reskilling_mode],
-                    opt_target=optimise,
-                    reg_constraint="regC" if regional_constraint else "no-regC",
-                    year=rp.year,
-                )
-                pkl_path = os.path.join(results_dir, dirname, f"{dirname}.pkl")
-
-                print(f"=== {dirname} ===")
-                print(reskilling_mode)
-                t0 = time.time()
-
-                # 2) Skip or run the simulation
-                if rerun_simulations and not os.path.exists(pkl_path):
-                    print("→ Running simulation…")
-                    simulation_results = rp.simulate_regional(
-                        level="isco_3_digit",
-                        countries=countries,
-                        scenarios=scenarios,
-                        transition_optimisation=optimise,
-                        reskilling=reskilling_mode,
-                        reskilling_journey_length=reskilling_journey_length,
-                        region_constraints=regional_constraint,
-                        target_job_availability_coeffy="COEFFY_mean+sd",
-                        mask_diagonal=True,
-                        transition_thresholds=transition_threshold,
-                        out_dir=results_dir,
+                    # 2) Keep your dirname logic (regC vs no-regC already included)
+                    dirname = rp.dirname_out_reg.format(
+                        sim_version=rp.simulation_name[reskilling_mode],
+                        opt_target=optimise,
+                        reg_constraint="regC" if regional_constraint else "no-regC",
+                        year=rp.year,
                     )
-                else:
-                    if rerun_simulations:
-                        print("→ Pickle exists; skipping re-run")
+                    pkl_path = os.path.join(results_dir, dirname, f"{dirname}.pkl")
+
+                    print(f"=== {dirname} (scenario={scenario}) ===")
+                    print(reskilling_mode)
+                    t0 = time.time()
+
+                    # 3) Run per-scenario, pass [scenario] (not the whole list)
+                    if rerun_simulations and not os.path.exists(pkl_path):
+                        print("→ Running simulation…")
+                        simulation_results = rp.simulate_regional(
+                            level="isco_3_digit",
+                            countries=countries,
+                            scenarios=[scenario],  # <-- only this scenario
+                            transition_optimisation=optimise,
+                            reskilling=reskilling_mode,
+                            reskilling_journey_length=reskilling_journey_length,
+                            region_constraints=regional_constraint,
+                            target_job_availability_coeffy="COEFFY_mean+sd",
+                            mask_diagonal=True,
+                            transition_thresholds=transition_threshold,
+                            out_dir=results_dir,  # <-- scenario-specific base
+                        )
                     else:
-                        print("→ rerun_simulations=False; will load existing pickle")
-                    simulation_results = None
+                        if rerun_simulations:
+                            print("→ Pickle exists; skipping re-run")
+                        else:
+                            print("→ rerun_simulations=False; will load existing pickle")
+                        simulation_results = None
 
-                print(f"→ setup + simulation took {(time.time() - t0) / 60:.1f} min")
+                    print(f"→ setup + simulation took {(time.time() - t0) / 60:.1f} min")
 
-                # 3) Visualise (loads from pickle if simulation_results is None)
-                for step in steps:
-                    rp.visualise_simulation_results_eu(
-                        simulation_results=simulation_results,
-                        transition_optimisation=optimise,
-                        reskilling_version=rp.simulation_name[reskilling_mode],
-                        step=step,
-                        regional_constraint=regional_constraint,
-                        base_dir=results_dir,
-                        vmax_wages=3000,
-                        vmax_transitions=8,
-                        show_title=False,
-                        title_fontsize="small",
-                        cbar_fraction=0.025,
-                        combine_vars_in_sector_plot=True,
-                    )
+                    # 4) Visualise into the same scenario folder
+                    for step in steps:
+                        rp.visualise_simulation_results_eu(
+                            simulation_results=simulation_results,
+                            transition_optimisation=optimise,
+                            reskilling_version=rp.simulation_name[reskilling_mode],
+                            step=step,
+                            regional_constraint=regional_constraint,
+                            base_dir=results_dir,  # <-- scenario-specific base
+                            vmax_wages=3000,
+                            vmax_transitions=8,
+                            show_title=False,
+                            title_fontsize="small",
+                            cbar_fraction=0.025,
+                            combine_vars_in_sector_plot=True,
+                        )
 
     # Your statements here
     stop = timeit.default_timer()
