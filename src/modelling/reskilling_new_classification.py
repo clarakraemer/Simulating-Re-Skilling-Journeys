@@ -1106,7 +1106,6 @@ class ReskillingPathways:
                 rng = np.random.RandomState(42)
                 df_transition_pool_shuffled = df_transition_pool.sample(frac=1, random_state=rng).reset_index(drop=True)
 
-                # --- NEW: one clean baseline per worker ---
                 for i, search_obs in df_transition_pool_shuffled.iterrows():
                     occ_skills_mat = self.occ_skills_mat_3d.copy()
                     added_skill = None
@@ -1271,46 +1270,54 @@ class ReskillingPathways:
 
                         else:
                             # No viable (non-HV) target exists
-                            if scenario == "shortage":
-                                # Shortage scenario: worker stays → keep wage (Δ = 0)
-                                base_delta_hv = 0.0
-                                search_obs[f"earnings_delta_closest_switch_hv_step_{step}"] = base_delta_hv
-                                search_obs[f"earnings_delta_closest_switch_sum_hv_step_{step}"] = 0.0
-                                search_obs[f"earnings_delta_closest_switch_sum_hv_mio_step_{step}"] = 0.0
-
-                                # percentage change also 0 (if earnings known), else NaN
-                                if pd.notna(search_obs["annual_earnings"]) and search_obs["annual_earnings"] != 0:
-                                    search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = 0.0
-                                else:
-                                    search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = np.nan
-
-                                search_obs[f"n_hv_transitions_step_{step}"] = 0
-                                search_obs[f"n_hv_transitions_sum_step_{step}"] = 0
-                                search_obs[f"transition_hv_step_{step}"] = False
-                                search_obs[f"transition_target_hv_step_{step}"] = None
-                                search_obs[f"target_category_hv_step_{step}"] = None
+                            if scenario == "shortage": # Shortage scenario: worker stays → keep wage (Δ = 0)
+                                base_delta = 0.0  # keep wage
                             else:
-                                # At-risk scenarios: full wage loss as we assume workers to become unemployed
-                                base_delta_hv = -1 * search_obs["annual_earnings"]
-                                search_obs[f"earnings_delta_closest_switch_hv_step_{step}"] = base_delta_hv
-                                search_obs[f"earnings_delta_closest_switch_sum_hv_step_{step}"] = (
-                                        base_delta_hv * search_obs[coeffy_weight]
-                                )
-                                search_obs[f"earnings_delta_closest_switch_sum_hv_mio_step_{step}"] = (
-                                        search_obs[f"earnings_delta_closest_switch_sum_hv_step_{step}"] / 1e6
-                                )
-                                if pd.notna(search_obs["annual_earnings"]) and search_obs["annual_earnings"] != 0:
-                                    search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = (
-                                            base_delta_hv / search_obs["annual_earnings"]
-                                    )
-                                else:
-                                    search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = np.nan
+                                base_delta = -1 * search_obs["annual_earnings"]  # full loss
 
-                                search_obs[f"n_hv_transitions_step_{step}"] = 0
-                                search_obs[f"n_hv_transitions_sum_step_{step}"] = 0
-                                search_obs[f"transition_hv_step_{step}"] = False
-                                search_obs[f"transition_target_hv_step_{step}"] = None
-                                search_obs[f"target_category_hv_step_{step}"] = None
+                                # BASE per-worker delta & totals
+                            search_obs[f"earnings_delta_closest_switch_step_{step}"] = base_delta
+                            search_obs[f"earnings_delta_closest_switch_sum_step_{step}"] = (
+                                    base_delta * search_obs[coeffy_weight]
+                            )
+                            search_obs[f"earnings_delta_closest_switch_sum_mio_step_{step}"] = (
+                                    search_obs[f"earnings_delta_closest_switch_sum_step_{step}"] / 1e6
+                            )
+                            if pd.notna(search_obs["annual_earnings"]) and search_obs["annual_earnings"] != 0:
+                                search_obs[f"earnings_delta_closest_switch_pct_step_{step}"] = (
+                                        base_delta / search_obs["annual_earnings"]
+                                )
+                            else:
+                                search_obs[f"earnings_delta_closest_switch_pct_step_{step}"] = np.nan
+
+                            # Flags
+                            search_obs[f"n_viable_transitions_step_{step}"] = 0
+                            search_obs[f"n_viable_transitions_sum_step_{step}"] = 0
+                            search_obs[f"transition_viable_step_{step}"] = False
+                            search_obs[f"transition_target_step_{step}"] = None
+                            search_obs[f"transition_target_code_step_{step}"] = None
+                            search_obs[f"target_category_step_{step}"] = None
+
+                            # (optional) also stamp the HV fields for diagnostics
+                            base_delta_hv = base_delta
+                            search_obs[f"earnings_delta_closest_switch_hv_step_{step}"] = base_delta_hv
+                            search_obs[f"earnings_delta_closest_switch_sum_hv_step_{step}"] = (
+                                    base_delta_hv * search_obs[coeffy_weight]
+                            )
+                            search_obs[f"earnings_delta_closest_switch_sum_hv_mio_step_{step}"] = (
+                                    search_obs[f"earnings_delta_closest_switch_sum_hv_step_{step}"] / 1e6
+                            )
+                            if pd.notna(search_obs["annual_earnings"]) and search_obs["annual_earnings"] != 0:
+                                search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = (
+                                        base_delta_hv / search_obs["annual_earnings"]
+                                )
+                            else:
+                                search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = np.nan
+                            search_obs[f"n_hv_transitions_step_{step}"] = 0
+                            search_obs[f"n_hv_transitions_sum_step_{step}"] = 0
+                            search_obs[f"transition_hv_step_{step}"] = False
+                            search_obs[f"transition_target_hv_step_{step}"] = None
+                            search_obs[f"target_category_hv_step_{step}"] = None
 
                         if not target_hv.empty:
                             # Every worker transitions to target job based on switching
@@ -1337,6 +1344,21 @@ class ReskillingPathways:
                                 )
                             else:
                                 search_obs[f"earnings_delta_closest_switch_hv_pct_step_{step}"] = np.nan
+
+                            # mirror HV into BASE so downstream plots see the realized outcome
+                            search_obs[f"earnings_delta_closest_switch_step_{step}"] = base_delta_hv
+                            search_obs[f"earnings_delta_closest_switch_sum_step_{step}"] = (
+                                    base_delta_hv * search_obs[coeffy_weight]
+                            )
+                            search_obs[f"earnings_delta_closest_switch_sum_mio_step_{step}"] = (
+                                    search_obs[f"earnings_delta_closest_switch_sum_step_{step}"] / 1e6
+                            )
+                            if pd.notna(search_obs["annual_earnings"]) and search_obs["annual_earnings"] != 0:
+                                search_obs[f"earnings_delta_closest_switch_pct_step_{step}"] = (
+                                        base_delta_hv / search_obs["annual_earnings"]
+                                )
+                            else:
+                                search_obs[f"earnings_delta_closest_switch_pct_step_{step}"] = np.nan
 
                             search_obs[f"n_hv_transitions_step_{step}"] = target_occs_filtered_hv.shape[0]
                             search_obs[f"n_hv_transitions_sum_step_{step}"] = (
@@ -2602,12 +2624,26 @@ class ReskillingPathways:
                 # ---------------------------------------------------------------------
                 # INDUSTRY PLOTS (earnings losses and transition numbers)
                 # ---------------------------------------------------------------------
-                vars = ["earnings_delta_closest_switch_sum_mio", "n_viable_transitions"]
+                # --- NEW: align sector plot with map mask ---
+                cntr_missing = ['IT', 'NL', 'DE', 'HU', 'AT', 'RO', 'PL', 'ES', 'LT', 'SI', 'CY', 'BE', 'CZ', 'HR',
+                                'IS', 'LV']
+
+                # work on a local copy so we don't touch the original
+                df_sector = df_transition_numbers.copy()
+
+                # earnings-per-worker variable used by the sector plot
+                var_earn = "earnings_delta_rel_w" if "earnings_delta_rel_w" in df_sector.columns else "earnings_delta_rel"
+
+                # if the current country is in the missing list, blank out earnings (consistent with map)
+                if country in cntr_missing and var_earn in df_sector.columns:
+                    df_sector[var_earn] = np.nan
+
+                vars = [var_earn, "n_viable_transitions"] #NEW
                 var_labels = [
-                    "$\Delta$ Annual earnings [M€ (2023)]",
+                    "$\\Delta$ Annual earnings per worker (€)",
                     "Viable transitions per worker [-]",
                 ]
-                var_fname = ["earnings", "transitions"]
+                var_fname = ["earnings_per_worker", "transitions"]
 
                 for i, var in enumerate(vars):
                     fig, (ax1, ax2) = plt.subplots(
@@ -2619,16 +2655,16 @@ class ReskillingPathways:
                     )
 
                     y_order = (
-                        df_transition_numbers.groupby("NACE2_1D_label")
+                        df_sector.groupby("NACE2_1D_label")
                         .median()[var]
                         .sort_values(ascending=False)
                         .index.values
                     )
 
                     # left
-                    if var_fname[i] == "earnings":
+                    if var_fname[i] == "earnings_per_worker":
                         sns.boxplot(
-                            data=df_transition_numbers,
+                            data=df_sector,
                             x=var,
                             y="NACE2_1D_label",
                             orient="h",
@@ -2646,23 +2682,39 @@ class ReskillingPathways:
                         )
 
                         # right
-                        sns.barplot(
-                            data=df_transition_numbers,
-                            x=var,
-                            y="NACE2_1D_label",
-                            orient="h",
-                            estimator=np.sum,
-                            ci=None,
-                            order=y_order,
-                            palette="RdYlGn_r",
-                            ax=ax2,
+                        # CHANGE: worker-weighted mean per sector (using scenario weight)
+                        earn_col = var  # this is your per-worker column, e.g. 'earnings_delta_rel_w'
+                        wt_col = self.transition_pool_weights[scenario]
+
+                        wmean_df = (
+                            df_sector
+                            .dropna(subset=[earn_col, wt_col])
+                            .groupby("NACE2_1D_label", as_index=False)
+                            .apply(lambda g: pd.Series({
+                                "wmean": np.average(g[earn_col].astype(float), weights=g[wt_col].astype(float))
+                            }))
                         )
-                        ax2.bar_label(
-                            ax2.containers[-1], fmt="%.0f", label_type="center"
+
+                        # keep the same order as left panel
+                        wmean_df["NACE2_1D_label"] = pd.Categorical(wmean_df["NACE2_1D_label"],
+                                                                    categories=y_order, ordered=True)
+                        wmean_df = wmean_df.sort_values("NACE2_1D_label")
+
+                        ax2.barh(
+                            wmean_df["NACE2_1D_label"],
+                            wmean_df["wmean"],
+                            color=sns.color_palette("RdYlGn_r", len(wmean_df))
                         )
+
+                        if ax2.containers:
+                            ax2.bar_label(ax2.containers[-1], fmt="%.0f", label_type="center", fontsize=8)
+
+                        ax2.set_xlabel("$\\Delta$ Annual earnings per worker (€)")
+                        ax2.axvline(0, linestyle="-", color="grey", zorder=0)
+
                     elif var_fname[i] == "transitions":
                         sns.barplot(
-                            data=df_transition_numbers,
+                            data=df_sector,
                             x=var,
                             y="NACE2_1D_label",
                             orient="h",
@@ -3137,12 +3189,8 @@ class ReskillingPathways:
                 plt.close(fig)
 
             # save numbers
-            # todo: adjust to jointly save the numbers from all reskilling steps
-            vars = [
-                "earnings_delta_closest_switch_step_{}".format(step),
-                "n_viable_transitions_step_{}".format(step),
-            ]
             if save_tables:
+                vars = [per_worker_col, f"n_viable_transitions_step_{step}"]
                 res = gdf_transition_numbers_by_nuts[vars].describe()
                 res.to_csv(
                     os.path.join(
@@ -3156,16 +3204,23 @@ class ReskillingPathways:
             # ---------------------------------------------------------------------
             # INDUSTRY PLOTS (earnings losses and transition numbers)
             # ---------------------------------------------------------------------
+            # --- NEW: mask countries with missing earnings for sector plots, to match the map ---
+            cntr_missing = ['IT', 'NL', 'DE', 'HU', 'AT', 'RO', 'PL', 'ES', 'LT', 'SI', 'CY', 'BE', 'CZ', 'HR', 'IS',
+                            'LV']
+
+            # work on a filtered copy so maps/earlier steps remain unchanged
+            df_sector = df_transition_numbers[~df_transition_numbers["COUNTRYW"].isin(cntr_missing)].copy()
+
             vars = [
                 "earnings_delta_closest_switch_step_{}".format(step),
                 "n_viable_transitions_step_{}".format(step),
             ]
             var_labels = [
-                "$\Delta$ Annual earnings [M€ (2023)]",
+                "$\\Delta$ Annual earnings per worker (€)",
                 "Job transitions per worker",
             ]
-            var_fname = ["earnings", "transitions"]
-            df_transition_numbers = df_transition_numbers.replace(
+            var_fname = ["earnings_per_worker", "transitions"]
+            df_sector = df_sector.replace(
                 to_replace={"NACE2_1D_label": self.nace_mapping}
             )
 
@@ -3174,8 +3229,8 @@ class ReskillingPathways:
                 industry_subset = self.nace_labels.loc[
                     self.nace_labels["paper_selection"] == True, "NACE2_1D_label_short"
                 ]
-                df_transition_numbers = df_transition_numbers.loc[
-                    df_transition_numbers["NACE2_1D_label"].isin(industry_subset)
+                df_sector = df_sector.loc[
+                    df_sector["NACE2_1D_label"].isin(industry_subset)
                 ]
 
             if not combine_vars_in_sector_plot:
@@ -3189,18 +3244,38 @@ class ReskillingPathways:
                         gridspec_kw={"width_ratios": [0.7, 0.3]},
                     )
 
+                    # NEW: add weighted per-worker € series that reconciles to totals
+                    norm_col = self.transition_pool_weights[scenario]  # e.g., COEFFY_...
+                    df_sector[f"earnings_pw_w_step_{step}"] = (  # ADD
+                            df_sector[f"earnings_delta_closest_switch_sum_step_{step}"]
+                            / df_sector[norm_col]
+                    )
+                    df_sector.loc[df_sector[norm_col] <= 0, f"earnings_pw_w_step_{step}"] = np.nan
+
+                    # NEW: order by what is plotted on the left
+                    if var_fname[i] == "earnings_per_worker":
+                        metric_left = f"earnings_pw_w_step_{step}"
+                    else:
+                        metric_left = var
+
                     y_order = (
-                        df_transition_numbers.groupby("NACE2_1D_label")
-                        .aggregate({var: "median"})
-                        .sort_values(by=var, ascending=False)
+                        df_sector.groupby("NACE2_1D_label")
+                        .aggregate({metric_left: "median"})
+                        .sort_values(by=metric_left, ascending=False)
                         .index.values
                     )
 
+                    #NEW
+                    from matplotlib.container import BarContainer
+                    def _main_bar_container(ax):
+                        bar_containers = [c for c in ax.containers if isinstance(c, BarContainer)]
+                        return max(bar_containers, key=lambda bc: len(bc.patches)) if bar_containers else None
+
                     # left
-                    if var_fname[i] == "earnings":
+                    if var_fname[i] == "earnings_per_worker":
                         sns.boxplot(
-                            data=df_transition_numbers,
-                            x=var,
+                            data=df_sector,
+                            x=f"earnings_pw_w_step_{step}",
                             y="NACE2_1D_label",
                             orient="h",
                             showfliers=False,
@@ -3216,24 +3291,41 @@ class ReskillingPathways:
                             ax=ax1,
                         )
 
-                        # right
-                        sns.barplot(
-                            data=df_transition_numbers,
-                            x=var,
-                            y="NACE2_1D_label",
-                            orient="h",
-                            estimator=np.sum,
-                            ci=None,
-                            order=y_order,
-                            palette="RdYlGn_r",
-                            ax=ax2,
-                        )
-                        ax2.bar_label(
-                            ax2.containers[-1], fmt="%.0f", label_type="center"
-                        )
+                        # right (NEW, worker-weighted mean per sector)
+                        earn_col = f"earnings_pw_w_step_{step}"
+                        wt = self.transition_pool_weights[scenario]  # e.g. "COEFFY_share_unviable_to_decarbonize"
+
+                        # guard for missing columns
+                        if earn_col in df_sector.columns and wt in df_sector.columns:
+                            wmean_df = (
+                                df_sector
+                                .dropna(subset=[earn_col, wt])
+                                .groupby("NACE2_1D_label", as_index=False)
+                                .apply(lambda g: pd.Series({
+                                    "wmean": np.average(g[earn_col].astype(float), weights=g[wt].astype(float))
+                                }))
+                                .sort_values("wmean", ascending=False)
+                            )
+                            # keep the same order you computed for the left panel
+                            wmean_df["NACE2_1D_label"] = pd.Categorical(wmean_df["NACE2_1D_label"], categories=y_order,
+                                                                        ordered=True)
+                            wmean_df = wmean_df.sort_values("NACE2_1D_label")
+
+                            ax2.barh(wmean_df["NACE2_1D_label"], wmean_df["wmean"],
+                                     color=sns.color_palette("RdYlGn_r", len(wmean_df)))
+
+                            if ax2.containers:
+                                ax2.bar_label(ax2.containers[-1], fmt="%.0f", label_type="center", fontsize=8)
+
+                            ax2.set_xlabel("$\\Delta$ Annual earnings per worker (€)")
+                            ax2.axvline(0, linestyle="-", color="grey", zorder=0)
+                        else:
+                            ax2.text(0.5, 0.5, "Missing columns for weighted mean", transform=ax2.transAxes,
+                                     ha="center")
+
                     elif var_fname[i] == "transitions":
                         sns.barplot(
-                            data=df_transition_numbers,
+                            data=df_sector,
                             x=var,
                             y="NACE2_1D_label",
                             orient="h",
@@ -3245,6 +3337,7 @@ class ReskillingPathways:
                         )
                         ax1.axvline(1, linestyle="-", color="lightcoral", zorder=0)
                         ax1.set_xlim(0)
+                        ax2.axvline(0, linestyle="-", color="grey", zorder=0) #NEW
 
                     for ax in [ax1, ax2]:
                         ax.axvline(0, linestyle="-", color="grey", zorder=0)
@@ -3295,16 +3388,29 @@ class ReskillingPathways:
                     gridspec_kw={"width_ratios": [0.7, 0.3]},
                 )
 
+                # NEW — weighted earnings per worker, consistent with the map (totals ÷ headcount)
+                norm_col = self.transition_pool_weights[scenario]
+                df_sector[f"earnings_pw_w_step_{step}"] = (
+                        df_sector[f"earnings_delta_closest_switch_sum_step_{step}"] / df_sector[norm_col]
+                )
+                df_sector.loc[df_sector[norm_col] <= 0, f"earnings_pw_w_step_{step}"] = np.nan
+
                 y_order = (
-                    df_transition_numbers.groupby("NACE2_1D_label")
+                    df_sector.groupby("NACE2_1D_label")
                     .aggregate({var: "mean"})
                     .sort_values(by=var, ascending=False)
                     .index.values
                 )
 
+                # NEW, fix bar labels
+                from matplotlib.container import BarContainer
+                def _main_bar_container(ax):
+                    bar_containers = [c for c in ax.containers if isinstance(c, BarContainer)]
+                    return max(bar_containers, key=lambda bc: len(bc.patches)) if bar_containers else None
+
                 # left
                 sns.barplot(
-                    data=df_transition_numbers,
+                    data=df_sector,
                     x="n_viable_transitions_step_{}".format(step),
                     y="NACE2_1D_label",
                     orient="h",
@@ -3314,27 +3420,43 @@ class ReskillingPathways:
                     palette="RdYlGn_r",
                     ax=ax1,
                 )
-                ax1.bar_label(
-                    ax1.containers[-1], fmt="%.1f", label_type="center", color="white"
-                )
+                bars_left = _main_bar_container(ax1)  #NEW
+                if bars_left is not None:  #NEW
+                    ax1.bar_label(bars_left, fmt="%.1f", label_type="center", color="white")  #NEW
+
                 ax1.axvline(1, linestyle="-", color="lightcoral", zorder=0)
                 ax1.set_xlim(0)
                 ax1.set_xlabel("Job transitions per worker [-]")
 
                 # right
-                sns.barplot(
-                    data=df_transition_numbers,
-                    x="earnings_delta_closest_switch_sum_mio_step_{}".format(step),
-                    y="NACE2_1D_label",
-                    orient="h",
-                    estimator=np.sum,
-                    ci=None,
-                    order=y_order,
-                    palette="RdYlGn_r",
-                    ax=ax2,
+                # CHANGE: worker-weighted mean per sector (consistent with map logic)
+                earn_col = f"earnings_pw_w_step_{step}"
+                wt_col = self.transition_pool_weights[scenario]
+
+                wmean_df = (
+                    df_sector
+                    .dropna(subset=[earn_col, wt_col])
+                    .groupby("NACE2_1D_label", as_index=False)
+                    .apply(lambda g: pd.Series({
+                        "wmean": np.average(g[earn_col].astype(float), weights=g[wt_col].astype(float))
+                    }))
                 )
-                ax2.bar_label(ax2.containers[-1], fmt="%.0f", label_type="center")
-                ax2.set_xlabel("$\Delta$ Annual earnings [M€ (2023)]")
+
+                # keep same left-panel order
+                wmean_df["NACE2_1D_label"] = pd.Categorical(wmean_df["NACE2_1D_label"],
+                                                            categories=y_order, ordered=True)
+                wmean_df = wmean_df.sort_values("NACE2_1D_label")
+
+                ax2.barh(
+                    wmean_df["NACE2_1D_label"],
+                    wmean_df["wmean"],
+                    color=sns.color_palette("RdYlGn_r", len(wmean_df))
+                )
+
+                if ax2.containers:
+                    ax2.bar_label(ax2.containers[-1], fmt="%.0f", label_type="center", fontsize=8)
+
+                ax2.set_xlabel("$\\Delta$ Annual earnings per worker (€)")
                 ax2.axvline(0, linestyle="-", color="grey", zorder=0)
 
                 for ax in [ax1, ax2]:
@@ -3378,20 +3500,17 @@ class ReskillingPathways:
 
                 # save numbers
                 if save_tables:
-                    df_transition_numbers[vars] = df_transition_numbers[vars].astype(
-                        float
-                    )
-                    res = df_transition_numbers.groupby("NACE2_1D_label")[vars].describe()
+                    vars = [per_worker_col, f"n_viable_transitions_step_{step}"]  # CHANGED (use weighted €/worker)
+                    res = gdf_transition_numbers_by_nuts[vars].describe()
                     res.to_csv(
                         os.path.join(
                             base_dir,
                             dirname,
-                            "{}_{}_{}_{}_{}_step_{}.{}".format(
-                                "EU", year, "sectoral", fname_snippet, scenario, step, "csv"
+                            "{}_{}_{}_{}.{}".format(
+                                "EU", year, "regional", scenario, "csv"
                             ),
                         )
                     )
-
 
 if __name__ == "__main__":
     import time
@@ -3503,7 +3622,7 @@ if __name__ == "__main__":
     ]
 
     # transition pools to analyse
-    scenarios = ["shortage"]  # ["at_risk", "high_carbon", "shortage"]
+    scenarios = ["at_risk"]  # ["at_risk", "high_carbon", "shortage"]
 
     # reskilling options to consider
     reskilling_modes = [
@@ -3530,7 +3649,7 @@ if __name__ == "__main__":
     regional_constraints = [True, False] # [True, False]
 
     # length of reskilling journey
-    reskilling_journey_length = 30
+    reskilling_journey_length = 20
     steps = np.arange(0, reskilling_journey_length + 1)
 
     # name mapping
