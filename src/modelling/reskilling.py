@@ -55,6 +55,14 @@ class ReskillingPathways:
         self.lfs_data = lfs_data
         self.year = year
 
+        # Correctness fix (revision): the centrality "not-yet-held" filter tracks skills
+        # acquired during a worker's journey, so a skill already learned is never
+        # re-offered. The former baseline-only behaviour (filter reads only the baseline
+        # occupation-skill matrix) is a deviation from the intended model and is retained
+        # behind this switch for the regression test and the SI robustness comparison.
+        # Set rp.journey_aware = False to reproduce the pre-correction (baseline-only) runs.
+        self.journey_aware = True
+
         # phaseout scenario implementations
         #self.phaseout_scenarios = ["coal", "brown_techchange", "brown"] # OLD
         self.phaseout_scenarios = ["at_risk", "high_carbon", "shortage"] # NEW
