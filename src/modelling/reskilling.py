@@ -1412,6 +1412,32 @@ class ReskillingPathways:
 
         return simulation_results
 
+    def _select_centrality_ranked(self, idx_occ, occ_skills_mat, ranked_positions, skill_rank):
+        """Task A: pick a skill from a coreness-ordered list of column positions.
+
+        `ranked_positions` is a list of occ-skill-matrix column indices, sorted by
+        descending coreness (e.g. all skills, or only green / DigComp skills).
+
+        The `journey_aware` switch (instance attribute, default False) controls the
+        "not-yet-held" filter:
+          * journey_aware=True  -> held = skills with weight>0 in the worker's ACCUMULATED
+            matrix (so a skill acquired earlier this journey is never re-offered); pick the
+            highest-coreness not-yet-held skill greedily.
+          * journey_aware=False -> held = skills with weight>0 in the BASELINE matrix
+            (occupation's original skills only); pick by rank (preserves a stable,
+            occupation-independent walk down the coreness order).
+        Returns a column index, or None if nothing remains.
+        """
+        journey = getattr(self, "journey_aware", False)
+        mat = occ_skills_mat if journey else self.occ_skills_mat_3d
+        held = set(np.where(mat.iloc[idx_occ].values > 0)[0])
+        rem = [pos for pos in ranked_positions if pos not in held]
+        if not rem:
+            return None
+        if journey:
+            return rem[0]
+        return rem[skill_rank - 1] if (skill_rank - 1) < len(rem) else None
+
     def reskill(
         self,
         idx_occ,
@@ -1483,58 +1509,57 @@ class ReskillingPathways:
             # and decided deliberately in Phase 2 (Task A). Because `rem` is therefore a
             # pure function of idx_occ, memoise it (identical ordered list, computed once
             # per occupation instead of per worker x per step).
-            rem = self._rem_cache.get(idx_occ)
-            if rem is None:
-                have = set(
-                    self.occ_skills_mat_3d.columns[
-                        self.occ_skills_mat_3d.iloc[idx_occ] > 0
-                        ]
+            if getattr(self, "journey_aware", False):
+                # Task A (journey-aware): exclude skills already held (baseline + acquired
+                # this journey) and take the highest-coreness remaining one.
+                idx_skill = self._select_centrality_ranked(
+                    idx_occ, occ_skills_mat, self.core_ranked_skills, skill_rank
                 )
-                # filter out “have” from global coreness list (order preserved)
-                rem = [
-                    idx
-                    for idx, lbl in zip(self.core_ranked_skills, self._core_ranked_labels)
-                    if lbl not in have
-                ]
-                self._rem_cache[idx_occ] = rem
-            if not rem:
-                idx_skill = None
             else:
-                idx_skill = rem[skill_rank - 1]
+                # baseline-only (current behaviour, preserved for comparability): the
+                # label-vs-URI `have` filter is effectively a no-op, so this walks the
+                # global coreness order by rank. Memoised per idx_occ.
+                rem = self._rem_cache.get(idx_occ)
+                if rem is None:
+                    have = set(
+                        self.occ_skills_mat_3d.columns[
+                            self.occ_skills_mat_3d.iloc[idx_occ] > 0
+                            ]
+                    )
+                    # filter out “have” from global coreness list (order preserved)
+                    rem = [
+                        idx
+                        for idx, lbl in zip(self.core_ranked_skills, self._core_ranked_labels)
+                        if lbl not in have
+                    ]
+                    self._rem_cache[idx_occ] = rem
+                idx_skill = rem[skill_rank - 1] if rem else None
 
-        # Digital reskilling:
+        # Digital reskilling (Task A: coreness-ordered over the DigComp list,
+        #  replacing the former random draw):
         elif reskilling_mode == "digital":
-            have_uris = set(
-                self.occ_skills_mat_3d.columns[
-                    self.occ_skills_mat_3d.iloc[idx_occ] > 0
-                    ]
+            if not hasattr(self, "_digital_ranked"):
+                self._digital_ranked = (
+                    self.df_coreness[self.df_coreness["conceptUri"].isin(set(self.digital_skills))]
+                    .sort_values("coreness", ascending=False)
+                    .index.tolist()
+                )
+            idx_skill = self._select_centrality_ranked(
+                idx_occ, occ_skills_mat, self._digital_ranked, skill_rank
             )
-            # NEW: draw from the list you stored in __init__
-            pool_uris = [u for u in self.digital_skills if u not in have_uris]
 
-            if not pool_uris:
-                idx_skill = None
-            else:
-                chosen_uri = pd.Series(pool_uris).sample(n=1).iloc[0]
-                # NEW: directly find its column position
-                idx_skill = list(self.occ_skills_mat_3d.columns).index(chosen_uri)
-
-        # Green reskilling:
+        # Green reskilling (Task A: coreness-ordered over the ESCO green list,
+        #  replacing the former random draw):
         elif reskilling_mode == "green":
-            have_uris = set(
-                self.occ_skills_mat_3d.columns[
-                    self.occ_skills_mat_3d.iloc[idx_occ] > 0
-                    ]
+            if not hasattr(self, "_green_ranked"):
+                self._green_ranked = (
+                    self.df_coreness[self.df_coreness["conceptUri"].isin(set(self.green_skills))]
+                    .sort_values("coreness", ascending=False)
+                    .index.tolist()
+                )
+            idx_skill = self._select_centrality_ranked(
+                idx_occ, occ_skills_mat, self._green_ranked, skill_rank
             )
-            # NEW: draw from the list you stored in __init__
-            pool_uris = [u for u in self.green_skills if u not in have_uris]
-
-            if not pool_uris:
-                idx_skill = None
-            else:
-                chosen_uri = pd.Series(pool_uris).sample(n=1).iloc[0]
-                # NEW: directly find its column position
-                idx_skill = list(self.occ_skills_mat_3d.columns).index(chosen_uri)
 
         # Steps dependent of reskilling mode:
         # 3) add the worker's newly acquired skill (essential = value of 1).
