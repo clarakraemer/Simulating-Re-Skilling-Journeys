@@ -1468,22 +1468,35 @@ class ReskillingPathways:
         # 2) by rank
         elif reskilling_mode == "coreness_ranked":
             if not hasattr(self, "core_ranked_skills"):
-                self.core_ranked_skills = (
-                    self.df_coreness
-                    .sort_values("coreness", ascending=False)
-                    .index
-                    .tolist()
+                ranked = self.df_coreness.sort_values("coreness", ascending=False)
+                self.core_ranked_skills = ranked.index.tolist()
+                # Cache each ranked skill's preferredLabel ONCE, aligned with
+                # core_ranked_skills, so the per-call filter below needs no pandas
+                # .loc lookups (previously ~13,891 .loc calls per reskill() call).
+                self._core_ranked_labels = ranked["preferredLabel"].tolist()
+                self._rem_cache = {}
+            # NOTE (behaviour preserved, do not change here): `have` is read from the
+            # BASELINE matrix self.occ_skills_mat_3d, so it depends only on idx_occ and
+            # NOT on skills acquired earlier in this worker's journey. Whether the
+            # "not-yet-held" filter should track within-journey acquisitions is a real
+            # semantic question recorded as an open question in revision/INVESTIGATION.md
+            # and decided deliberately in Phase 2 (Task A). Because `rem` is therefore a
+            # pure function of idx_occ, memoise it (identical ordered list, computed once
+            # per occupation instead of per worker x per step).
+            rem = self._rem_cache.get(idx_occ)
+            if rem is None:
+                have = set(
+                    self.occ_skills_mat_3d.columns[
+                        self.occ_skills_mat_3d.iloc[idx_occ] > 0
+                        ]
                 )
-            have = set(
-                self.occ_skills_mat_3d.columns[
-                    self.occ_skills_mat_3d.iloc[idx_occ] > 0
-                    ]
-            )
-            # filter out “have” from global coreness list
-            rem = [
-                idx for idx in self.core_ranked_skills
-                if self.df_coreness.loc[idx, "preferredLabel"] not in have
-            ]
+                # filter out “have” from global coreness list (order preserved)
+                rem = [
+                    idx
+                    for idx, lbl in zip(self.core_ranked_skills, self._core_ranked_labels)
+                    if lbl not in have
+                ]
+                self._rem_cache[idx_occ] = rem
             if not rem:
                 idx_skill = None
             else:
