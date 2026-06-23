@@ -1032,6 +1032,7 @@ class ReskillingPathways:
                                 reskilling_mode=reskilling,
                                 mask_diagonal=mask_diagonal,
                                 skill_rank=step,
+                                prev_sim_mat=sim_mat,  # incremental M_oo update
                             )
 
                         # stamp onto this search_obs row
@@ -1420,6 +1421,7 @@ class ReskillingPathways:
         skill_rank=1,
         q_coreness=99.9,
         mask_diagonal=True,
+        prev_sim_mat=None,
     ):
         """
 
@@ -1522,24 +1524,37 @@ class ReskillingPathways:
                 idx_skill = list(self.occ_skills_mat_3d.columns).index(chosen_uri)
 
         # Steps dependent of reskilling mode:
-        # 3) update occ-skills matrix with worker's newly acquired skill
-        #    Note: this adds the skill as an essential skill (value of 1).
-        occ_skills_mat_3d_updated = occ_skills_mat.copy()
+        # 3) add the worker's newly acquired skill (essential = value of 1).
+        #    The caller (simulate / simulate_regional) passes a fresh per-worker copy
+        #    of occ_skills_mat_3d, so we mutate it in place and avoid copying the full
+        #    (125 x 13891) matrix on every skill step.
+        occ_skills_mat_3d_updated = occ_skills_mat
         if idx_skill is not None:
             occ_skills_mat_3d_updated.iloc[idx_occ, idx_skill] = 1
 
-        # 4) re-calculate the occupation similarity matrix (via dot product)
-        occ_sim_mat_3d_updated = np.dot(
-            occ_skills_mat_3d_updated.values,
-            occ_skills_mat_3d_updated.values.transpose(),
-        )
+        # 4) update the occupation-similarity matrix M_oo = M_os @ M_os.T.
+        #    Adding one skill to occupation `idx_occ` changes only row/column idx_occ,
+        #    so recompute just that vector instead of the full dense product. This is
+        #    equivalent to the full recompute within floating tolerance (~1e-15); the
+        #    only row that feeds find_closest (row idx_occ) is recomputed exactly.
+        #    Fall back to a full recompute when no prior matrix is carried.
+        if prev_sim_mat is None or idx_skill is None:
+            occ_sim_mat_3d_updated = np.dot(
+                occ_skills_mat_3d_updated.values,
+                occ_skills_mat_3d_updated.values.transpose(),
+            )
+            if mask_diagonal:
+                np.fill_diagonal(occ_sim_mat_3d_updated, 0)
+        else:
+            M = occ_skills_mat_3d_updated.values
+            new_vec = M @ M[idx_occ]  # M_oo[idx_occ, :] == M_oo[:, idx_occ] (symmetric)
+            occ_sim_mat_3d_updated = np.array(prev_sim_mat, copy=True)
+            occ_sim_mat_3d_updated[idx_occ, :] = new_vec
+            occ_sim_mat_3d_updated[:, idx_occ] = new_vec
+            if mask_diagonal:
+                occ_sim_mat_3d_updated[idx_occ, idx_occ] = 0.0
 
-        # 5) fill the diagonal with zeros to avoid self-transitions
-        if mask_diagonal:
-            np.fill_diagonal(occ_sim_mat_3d_updated, 0)
-
-        #return occ_sim_mat_3d_updated, occ_skills_mat_3d_updated
-        return occ_sim_mat_3d_updated, occ_skills_mat_3d_updated, idx_skill  # NEW
+        return occ_sim_mat_3d_updated, occ_skills_mat_3d_updated, idx_skill
 
     def simulate_regional(
         self,
@@ -1808,6 +1823,7 @@ class ReskillingPathways:
                                     reskilling_mode=reskilling,
                                     skill_rank=int(step),
                                     mask_diagonal=mask_diagonal,
+                                    prev_sim_mat=sim_mat,  # incremental M_oo update
                                 )
 
                             # find closest target occupations
