@@ -125,6 +125,25 @@ Method: AST import graph from the 6 live notebooks + transitive closure (code); 
 
 **Sample/test mode:** none explicit, but `simulate(countries=["DE"], reskilling_journey_length=…)` is a de-facto subset switch (`get_occs(lfs_country_subset=…)` at `269`). Phase 1.2 wraps this.
 
+### 6.1 Phase-1 profiling update (record kept honest for the appeal)
+
+The pre-fix paragraph above (and CLAUDE.md §6) assumed `M_oo` recompute was the runtime bottleneck. **Profiling `simulate_regional` (DE/shortage/coreRanked, journey-3) disproved this** and relocated the bottleneck twice:
+
+| Stage | Total runtime (same case) | Dominant cost |
+|---|---|---|
+| Baseline (before any change) | 241.8 s | `coreness_ranked` selection list-comp `reskilling.py:1483` (~100 s, ~41%); `M_oo` recompute only ~3.5% |
+| After Phase 1.1 (incremental `M_oo`) | ~same | unchanged — `M_oo` was never the bottleneck (~0 wall-clock gain) |
+| After Phase 1.1b (selection fix) | **77.0 s (3.1× faster)** | now the pandas `.copy()` layer in `find_closest` / share-filtering (`managers.py:557`, ~19.6 s, ~25%) |
+
+**Conclusions recorded:**
+- **Phase 1.1 (incremental `M_oo`) is kept** as a correct, free minor win (behaviour-preserving, max\|Δ\|=0), but it is **not** a meaningful speedup here. The earlier "~100×" / "hours → minutes from `M_oo`" estimate was wrong.
+- **Phase 1.1b (coreness selection)** delivered the real Phase-1 speedup (**3.1×** so far) by removing ~13,891 per-call pandas `.loc` lookups and memoising the ordered `rem` per `idx_occ`.
+- The **next** profiled target is the `find_closest` / `.copy()` layer (~25%), deferred — to be chosen from a fresh profile, not guessed.
+
+### 6.2 Open question for Task A — `have` reads the baseline matrix
+
+In the `coreness_ranked` selection (`reskilling.py`), the set of skills an occupation already holds (`have`) is read from the **baseline** matrix `self.occ_skills_mat_3d`, **not** from the per-worker matrix that accumulates skills during the journey. So the "not-yet-held" filter does **not** exclude skills acquired earlier in the same worker's journey. The Phase-1.1b memoisation (keyed on `idx_occ`) **preserves this exactly** and does not change it. **Whether the filter should track within-journey acquisitions is a genuine semantic question** that affects the green/digital/transferable ordering and must be decided deliberately in **Phase 2 (Task A)** — not silently "fixed", which would be behaviour-changing and would corrupt the gate.
+
 ---
 
 ## 7. Change-scope table (Tasks A–E)
