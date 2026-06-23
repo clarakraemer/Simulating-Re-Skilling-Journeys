@@ -79,8 +79,11 @@ def main():
 
     lfs = assemble_lfs_data()
     rp = ReskillingPathways(osm_version="weighted", sim_metric="cooc", lfs_data=lfs, year=2023)
+    # review-copy was generated before the journey-aware correction, so the regression
+    # against the frozen reference must use baseline-only behaviour.
+    rp.journey_aware = False
 
-    print(f"GATE: countries={countries} journey={JOURNEY} thresholds={THRESH} scenario={SCENARIO}")
+    print(f"GATE: countries={countries} journey={JOURNEY} thresholds={THRESH} scenario={SCENARIO} (journey_aware=False)")
     rows = []
     for prog, sim_name in PROGRAMS.items():
         for regc in (True, False):

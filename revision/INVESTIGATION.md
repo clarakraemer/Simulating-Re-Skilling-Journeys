@@ -140,9 +140,22 @@ The pre-fix paragraph above (and CLAUDE.md §6) assumed `M_oo` recompute was the
 - **Phase 1.1b (coreness selection)** delivered the real Phase-1 speedup (**3.1×** so far) by removing ~13,891 per-call pandas `.loc` lookups and memoising the ordered `rem` per `idx_occ`.
 - The **next** profiled target is the `find_closest` / `.copy()` layer (~25%), deferred — to be chosen from a fresh profile, not guessed.
 
-### 6.2 Open question for Task A — `have` reads the baseline matrix
+### 6.2 Resolved (Task A): journey-aware not-yet-held filter
 
-In the `coreness_ranked` selection (`reskilling.py`), the set of skills an occupation already holds (`have`) is read from the **baseline** matrix `self.occ_skills_mat_3d`, **not** from the per-worker matrix that accumulates skills during the journey. So the "not-yet-held" filter does **not** exclude skills acquired earlier in the same worker's journey. The Phase-1.1b memoisation (keyed on `idx_occ`) **preserves this exactly** and does not change it. **Whether the filter should track within-journey acquisitions is a genuine semantic question** that affects the green/digital/transferable ordering and must be decided deliberately in **Phase 2 (Task A)** — not silently "fixed", which would be behaviour-changing and would corrupt the gate.
+**Open question (raised in Phase 1):** in the `coreness_ranked` selection the set of skills an occupation already holds (`have`) was read from the **baseline** matrix `self.occ_skills_mat_3d`, not from the per-worker matrix that accumulates skills during the journey — so the "not-yet-held" filter did **not** exclude skills acquired earlier in the same journey. Phase-1.1b preserved this exactly rather than silently changing it.
+
+**Decision (Phase 2):** this baseline-only behaviour is a **deviation from the model's stated assumption** (acquired skills stick and should not be re-offered). It is **corrected to journey-aware** (the filter tracks within-journey acquisitions), made the **default** in commit `0a7aa4a` — a deliberate correctness fix, separate from Task A's core green/digital change (`62dbcd3`). Baseline-only is retained behind `rp.journey_aware = False` for the disable-switch regression and an SI robustness comparison.
+
+**Measured effect** (sample DE/HR/CY/LV, `at_risk`, no-regC, journey-12; COEFFY-weighted mean `n_viable_transitions`):
+
+| country | n | intensity @ step 4 | intensity @ step 12 | workers whose 1st-transition step shifts |
+|---|---|---|---|---|
+| DE | 620 | 0.666 → 0.666 (+0.0%) | 1.123 → 1.099 (−2.2%) | 13.1% |
+| HR | 61 | 0.699 → 0.699 (+0.0%) | 1.279 → 1.206 (−5.6%) | 9.8% |
+| CY | 20 | 0.776 → 0.776 (+0.0%) | 1.356 → 1.296 (−4.4%) | 5.0% |
+| LV | 18 | 0.651 → 0.651 (+0.0%) | 1.014 → 0.946 (−6.7%) | 0.0% |
+
+**Scope of the change:** confined to **transferable**. The effect is **0% at step 4** and **−2% to −7% at step 12** (journey-aware unlocks slightly fewer transitions; the gap grows with step because that is where the global-coreness walk begins hitting skills the occupation already holds). **Green/digital are bit-identical under either mode** (greedy pick ≡ rank-walk) and **tailored is unaffected by construction**. The shift slightly *widens* tailored's advantage over transferable, consistent with the paper's narrative, and the headline ("at least two-thirds fewer skills") is unaffected. Exact corrected figures come from the single end-of-phase full-country run; the before/after table for the response letter is in `revision/` (Task A deliverable).
 
 ---
 
