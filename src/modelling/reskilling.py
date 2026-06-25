@@ -2176,7 +2176,14 @@ class ReskillingPathways:
                                             src_worker[f"transition_viable_step_{step}"] = False
                                             src_worker[f"transition_target_rank_step_{step}"] = rank
 
-                                            if scenario == "shortage":
+                                            # Task E (reporting-only): the asymmetry is outward
+                                            # non-reachers -> unemployment (full wage loss), inward
+                                            # non-reachers -> keep job (Δ=0). symmetric_employment
+                                            # applies the keep-job rule to BOTH flows (outward
+                                            # workers who cannot transition keep their current job
+                                            # rather than becoming unemployed). Default off ->
+                                            # Phase-1 behaviour; on -> output dir gets the _symE tag.
+                                            if scenario == "shortage" or symmetric_employment:
                                                 # Keep wage (Δ = 0)
                                                 base_delta = 0.0
                                                 src_worker[f"earnings_delta_closest_switch_step_{step}"] = base_delta
@@ -2286,7 +2293,10 @@ class ReskillingPathways:
                                         src_worker[f"added_skill_label_step_{step}"] = \
                                         df_opt.loc[sel, "skill_label"].iat[0]
 
-                                    if scenario == "shortage":
+                                    # Task E (reporting-only): symmetric_employment applies the
+                                    # keep-job rule to BOTH flows (outward non-reachers keep their
+                                    # current job instead of becoming unemployed). Default off.
+                                    if scenario == "shortage" or symmetric_employment:
                                         # keep wage (Δ = 0)
                                         src_worker[f"earnings_delta_closest_switch_step_{step}"] = 0.0
                                         src_worker[f"earnings_delta_closest_switch_sum_step_{step}"] = 0.0

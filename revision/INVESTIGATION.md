@@ -223,6 +223,29 @@ The pre-fix paragraph above (and CLAUDE.md §6) assumed `M_oo` recompute was the
 
 **Outputs:** each variant writes to a distinct `_optw{w}` dir with a `run_metadata.json` sidecar carrying the derived threshold (committed separately, `13e2af8`), so the three weights never collide with each other or the baseline.
 
+### 6.6 Built (Task E): symmetric-employment robustness (reporting-only)
+
+**The asymmetry:** a worker with no viable transition is treated differently by flow —
+outward (at_risk/high_carbon) → **unemployment** (full wage loss, −annual_earnings); inward
+(shortage) → **keep job** (Δ=0). `symmetric_employment` (default False) applies the keep-job
+rule to **both** flows (outward non-reachers keep their current job rather than becoming
+unemployed — the sensible symmetric reading; inward workers never leave their job, so "both
+unemployment" is nonsensical). Wired in both `simulate_regional` non-target branches (regC
+worker-loop #5a and no-regC #5c). Default off ⇒ the condition is byte-identical to Phase-1.
+
+**Verified (DE, at_risk, journey-8, off vs on):** feasibility columns (n_viable /
+transition_viable / transition_target) **0 differences** — it is purely a reporting toggle.
+Magnitude: outward mean earnings Δ at step 8 = **−54,209 (default) → −1,970 (symmetric)**;
+workers with a loss 91 → 38. **The outward income-loss figure is dominated by the
+unemployment assumption on the small non-reacher subset** — a material SI sensitivity (if
+at-risk workers who cannot transition keep their jobs, the headline outward losses nearly
+vanish).
+
+**No separate full run needed.** Because Task E changes *only* non-reacher income and leaves
+feasibility identical, the symmetric figures are **derivable post-hoc** from the main run's
+outputs (set non-reacher `earnings_delta` to 0). The committed flag enables a clean re-run
+(output dir gets the `_symE` tag), but the SI variant costs ~0 wall-clock.
+
 ---
 
 ## 7. Change-scope table (Tasks A–E)
