@@ -74,7 +74,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--countries", default="DE")
     ap.add_argument("--out-dir", default="/tmp/gate_out")
+    ap.add_argument("--scenario", default="shortage", choices=["shortage", "at_risk", "high_carbon"],
+                    help="flow to gate; review-copy was generated at journey 30 for all flows")
+    ap.add_argument("--journey", type=int, default=30,
+                    help="must match review-copy's generation length (30) to compare like-for-like")
     args = ap.parse_args()
+    global SCENARIO, JOURNEY
+    SCENARIO, JOURNEY = args.scenario, args.journey
     countries = ALL_COUNTRIES if args.countries == "all" else args.countries.split(",")
 
     lfs = assemble_lfs_data()

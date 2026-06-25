@@ -3572,8 +3572,13 @@ if __name__ == "__main__":
     import timeit
     from data.lfs import EuLfs
 
-    # re-run simulations & plot or plot only?
-    rerun_simulations = False
+    # re-run simulations & plot, or plot only (load existing pickles)?
+    # MUST be True for the full run — False only loads existing pkls and runs nothing.
+    # NOTE: combos whose output pkl already exists are SKIPPED (line ~3757), so this also
+    # acts as resume-on-restart. Therefore results/figures/reskilling_simulation/ must be
+    # EMPTY (or stale variant dirs removed) before a fresh full run, or stale outputs are
+    # kept. See the launch procedure.
+    rerun_simulations = True
 
     # ---------------------------------------------------------------------
     # Input data
@@ -3705,7 +3710,12 @@ if __name__ == "__main__":
     # consideration of regional mobility constraints
     regional_constraints = [True, False] # [True, False]
 
-    # length of reskilling journey
+    # length of reskilling journey — 30 for ALL flows, matching how review-copy was
+    # generated. (A per-flow outward=20 optimisation was tested and REVERTED: per-step
+    # columns 0-20 are bit-identical at journey 20 vs 30, but the result's population/share
+    # aggregate columns — COEFFY, NOBS, COEFFY_share_* — come out journey-length-dependent,
+    # and the EU-aggregate figures weight by COEFFY, so journey-20 outward could diverge
+    # from the frozen reference. Known-good = 30 everywhere.)
     reskilling_journey_length = 30
     steps = np.arange(0, reskilling_journey_length + 1)
 
@@ -3726,6 +3736,8 @@ if __name__ == "__main__":
         }
 
         for scenario in scenarios:
+            print(f"[CONFIG] scenario={scenario}  journey={reskilling_journey_length}")
+
             # 1) Build a scenario-specific base results dir
             scenario_tag = SCENARIO_SUFFIX.get(scenario, str(scenario))
             results_dir = os.path.join(
