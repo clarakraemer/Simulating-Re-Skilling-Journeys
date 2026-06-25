@@ -180,6 +180,19 @@ The pre-fix paragraph above (and CLAUDE.md §6) assumed `M_oo` recompute was the
 
 `above_current` holds income-loss at the Phase-1 baseline (20.1% / 3.9%) while landing workers in 1.84×/1.25× higher-employment destinations. **Effect is outward-dominant** (inward is **modestly affected, not flat** — share 1.00×→1.25×; the earlier "flat inward" was a DE+HR imputed-income artifact). The **`band=b` sweep is retained in the code and reported in the SI as a robustness variant**: results are monotone across bands (off→share_only), conclusions don't hinge on the exact rule, and the parameter-free above-current rule is the conservative reading of the paper's existing income-preference assumption.
 
+### 6.4 Built (Task C): program cost post-processing — `revision/taskC_cost.py`
+
+**Scaffold now, euro numbers later.** Reads per-program steps-to-first-transition (the figures' intensity quantity) and combines with per-participant cost bands → a Results/SI cost table. Bands are **unmistakable placeholders** (`1111/2222/3333/4444` €/skill — German voucher / Spain / OECD / WEF); maintainer supplies real values.
+
+**Inheritance: clean / filter-independent.** Uses ONLY `transition_viable_step_*` (journey count) + `COEFFY` (population). `assert_no_income_columns_used` enforces no earnings column is ever read, so Task C needs **no income KEEP-list**. Flagged in code: an earnings-derived band would require the KEEP list (which lives only in notebook-06 until the Phase-3 codify).
+
+**Framing (maintainer-decided):**
+- **Both flows, lead inward.** The cheap-exit vs expensive-entry contrast *is* the inward/outward asymmetry the paper reports, now in euros.
+- **Two cost columns, not a blend.** Headline = **€/participant (spend)** + **%-reached (yield)**, kept separate. The blended "€/reached-transition" is reported only as a **secondary** column for high-reach programs (≥50%), because for low-reach programs it is a denominator artifact (green €14.7M, digital undefined). The split lets digital appear honestly (0% reach, real €/participant) and answers R2's ROI ask robustly (spend vs yield, not denominator-driven).
+- **Conditioned on needing ≥1 skill;** the **0-skill share** (reach a transition with no reskilling) is reported alongside as context — itself a result.
+
+**Scaffold-test numbers (review-copy, pre-A–E; placeholder bands):** the structure surfaces the headline cleanly — **inward** 0-skill 0%, transferable/tailored ~100% reach at ~23–24 skills, green/digital spend real money per participant at **0.2% / 0% reach**; **outward** **96.3% reach with zero skills**, the few needing reskilling done by tailored in ~5 vs transferable ~10.5 skills. Final table runs on the post-A–E figures.
+
 ---
 
 ## 7. Change-scope table (Tasks A–E)
