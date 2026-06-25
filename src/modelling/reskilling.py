@@ -1685,6 +1685,8 @@ class ReskillingPathways:
         region_constraints=True,
         target_job_availability_coeffy="COEFFY_mean+sd",
         out_dir=os.path.join(useful_paths.figure_dir, "reskilling_simulation"),
+        optional_weight=0.5,
+        symmetric_employment=False,
     ):
 
         print(f"→ Enter simulate_regional(level={level}, regions={region_constraints}, "
@@ -1758,9 +1760,41 @@ class ReskillingPathways:
             reg_constraint=reg_constraint_str,
             year=self.year,
         )
+        # Robustness-variant tag: encode any non-default parameter that changes the
+        # output, so variants self-organise on disk and never overwrite each other or the
+        # Phase-1 baseline. Default (optional weight 0.5, symmetric off) -> NO suffix, so
+        # baseline paths are byte-identical and reproducible. (Naming-only; the I/O system
+        # itself is untouched — Phase 3.)
+        variant = ""
+        if abs(float(optional_weight) - 0.5) > 1e-12:
+            variant += "_optw{:g}".format(optional_weight)
+        if symmetric_employment:
+            variant += "_symE"
+        dirname = dirname + variant
         fname = "{}.pkl".format(dirname)
         target_dir = os.path.join(out_dir, dirname)
         utils.ccdir(target_dir)
+
+        # Sidecar metadata: make the run self-documenting so a robustness variant's
+        # parameters and DERIVED threshold are recoverable from the artifact, not memory
+        # (e.g. weight-0's q_viable=1.42). Written next to the pkl.
+        try:
+            import json
+            with open(os.path.join(target_dir, "run_metadata.json"), "w") as _mh:
+                json.dump({
+                    "program": self.simulation_name[reskilling],
+                    "transition_optimisation": transition_optimisation,
+                    "region_constraints": region_constraints,
+                    "year": self.year,
+                    "optional_weight": float(optional_weight),
+                    "symmetric_employment": bool(symmetric_employment),
+                    "q_viable": float(q_viable),
+                    "q_highly_viable": float(q_highly_viable),
+                    "journey_aware": getattr(self, "journey_aware", None),
+                    "destination_weighting": getattr(self, "destination_weighting", None),
+                }, _mh, indent=2)
+        except Exception as _e:
+            print(f"[warn] could not write run_metadata.json: {_e}")
 
         # load the table of jobs by NUTS2 & ISCO
         jobs_by_regions_countries = self.jobs_by_country_and_region()
