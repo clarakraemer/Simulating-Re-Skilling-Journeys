@@ -193,6 +193,36 @@ The pre-fix paragraph above (and CLAUDE.md §6) assumed `M_oo` recompute was the
 
 **Scaffold-test numbers (review-copy, pre-A–E; placeholder bands):** the structure surfaces the headline cleanly — **inward** 0-skill 0%, transferable/tailored ~100% reach at ~23–24 skills, green/digital spend real money per participant at **0.2% / 0% reach**; **outward** **96.3% reach with zero skills**, the few needing reskilling done by tailored in ~5 vs transferable ~10.5 skills. Final table runs on the post-A–E figures.
 
+### 6.5 Built (Task D): optional-skill-weight robustness sweep — `revision/taskD_*.py`
+
+**Feasibility-only isolation (decided).** The optional weight is varied in the *feasibility measure* (M_os → M_oo → threshold) while **program definitions are held at 0.5** (transferable coreness order, tailored upskilling table). This isolates exactly what SI row 14 asks — how feasibility/intensity respond to the treatment of optional skills — without confounding it with program redesign. SI-robustness only; **weight stays 0.5 by default** (disable switch).
+
+**Threshold re-derived by one fixed rule, weight varies** (across-group mean − 1 SD of within-group overlap, via the model's own `calc_sim_means_by_level`): q_viable = ISCO-4 mean−SD, q_highly_viable = ESCO-5 mean−SD.
+
+| weight | q_viable | q_highly_viable | reading |
+|---|---|---|---|
+| 0.0 | 1.42 | 7.26 | feasibility under essential skills only |
+| 0.5 | **3.68** | **10.80** | midpoint (used) — self-check returns the Phase-1 values |
+| 1.0 | 6.84 | 18.00 | optional as binding as essential |
+
+**0.5 regression: matrix max|Δ| = 0.0** — `set_weight(0.5)` restores `occ_skills_mat_3d` and `df_occ_sim` byte-for-byte. {0, 0.5, 1.0} are dyadic so M_oo(w) is exact; the gate is **strict**, not a tolerance.
+
+**Feasibility moves (ISCO-3 pairs):** mean overlap rises with the weight (0.20→0.34→0.55) but the calibrated threshold rises faster (1.42→6.84), so the feasible-transition set **shrinks** (2.3%→1.2%→0.9%).
+
+**Intensity moves (DE, shortage/inward, journey-30; outward is saturated ~0 skills and cannot discriminate — itself a finding):**
+
+| weight | transferable steps→1st | tailored steps→1st |
+|---|---|---|
+| 0.0 | 7.00 (100% reached) | 2.37 (100%) |
+| 0.5 | 16.02 (100%) | 24.15 (99.9%) |
+| 1.0 | 26.04 (100%) | 27.00 (94.8%) |
+
+**Honest finding — the program ranking is NOT weight-invariant.** The tailored-vs-transferable ordering **reverses** across weights (tailored ≪ transferable at w=0; transferable < tailored at w=0.5; ≈tie at w=1.0), because intensity is *when a fixed skill sequence crosses a weight-dependent threshold* and the threshold hits the two programs differently. **What is weight-robust** is the coarse gap: tailored and transferable reach inward at all weights while green/digital barely reach it at any weight (Task C: 0.2% / 0%). SI framing: *absolute intensity scales with the weight; the individualized/transferable vs random-standardized gap is weight-robust; the fine tailored-vs-transferable ordering is weight-sensitive in the inward flow.* (Do NOT claim ranking invariance — falsified here.)
+
+**w=0 timing benchmark (heaviest config in the revision):** DE/shortage/journey-30/w=0 = 182 s (transferable), 565 s (tailored). Runtime is dominated by the per-worker loop (tailored ~3× transferable), not the low threshold. The full-run w=0 sweep leg scales by country count — benchmark this before any unattended full run.
+
+**Outputs:** each variant writes to a distinct `_optw{w}` dir with a `run_metadata.json` sidecar carrying the derived threshold (committed separately, `13e2af8`), so the three weights never collide with each other or the baseline.
+
 ---
 
 ## 7. Change-scope table (Tasks A–E)
