@@ -157,6 +157,29 @@ The pre-fix paragraph above (and CLAUDE.md §6) assumed `M_oo` recompute was the
 
 **Scope of the change:** confined to **transferable**. The effect is **0% at step 4** and **−2% to −7% at step 12** (journey-aware unlocks slightly fewer transitions; the gap grows with step because that is where the global-coreness walk begins hitting skills the occupation already holds). **Green/digital are bit-identical under either mode** (greedy pick ≡ rank-walk) and **tailored is unaffected by construction**. The shift slightly *widens* tailored's advantage over transferable, consistent with the paper's narrative, and the headline ("at least two-thirds fewer skills") is unaffected. Exact corrected figures come from the single end-of-phase full-country run; the before/after table for the response letter is in `revision/` (Task A deliverable).
 
+### 6.3 Resolved (Task B): employment-share weighting of destinations
+
+**Change.** In the regional (regC) destination pick (`reskilling.py` `_select_destination`), instead of every worker taking the single top-income feasible target, feasible targets are weighted by **NUTS-2 employment share** (`COEFFY`, already merged in the regC path). Draws are **deterministically seeded per draw** (`_draw_seed(share_seed, step, region, worker-index)`) so they are order-independent and a post-hoc replay reproduces a live run exactly. regC-only (no-regC has no employment merge). **Disable switch** `destination_weighting="off"` returns the top-income target — verified to reproduce review-copy exactly (DE coreRanked regC, steps 0–12, max|Δ|=0, 0 decision cols).
+
+**Shipping rule: `above_current` (parameter-free wage floor).** Among targets paying **≥ the worker's current wage** (the income-preference assumption already in the paper), draw by employment share; fall back to all feasible if none qualify. Chosen over a `band=b` rule to avoid an unmotivated "why 25%?" free parameter, and because it **preserves the baseline income-loss share** while delivering ~the reviewer-requested employment-realism gain.
+
+**Dirty-vs-clean income correction (important).** The first sweep used DE+HR, but **both are in the income-exclusion (DROP) list** (DE 25%, HR 0% observed earnings) — so its income column was invalid (it priced imputed earnings as observed). The income exclusion is enforced **only at the reporting stage** (notebook-06 `iso_missing_earnings`), not in the model core, so the standalone sweep didn't inherit it; **published figures are unaffected**. The sweep was re-run on income-**eligible** + regC-surviving countries **SE+SK+DK** (98–99% observed earnings). The employment-share frontier is robust to this (it needs no earnings) and was unchanged in shape.
+
+**List-drift check.** notebook-01 DROP (18 countries) vs notebook-06 `iso_missing_earnings` (15) differ only by **{SI, BG, MT}**, which are excluded from the simulation entirely (ISCO 1–2-digit coverage) and never reach reporting — **benign, but a latent drift** → see Phase-3 codify action.
+
+**Validation (licensed).** Post-hoc capture reproduces a genuine live band run **exactly**: SE+SK+DK, 18,058 worker choices — mode-invariance 0 failures, per-worker destination identity 0 mismatches, income-delta 0 mismatches.
+
+**Committed result (above_current, income-eligible SE+SK+DK; COEFFY-weighted):**
+
+| flow | rule | mean Δ€ | %income-loss | empl. share (rel. to off) |
+|---|---|---|---|---|
+| AT_RISK (outward) @20 | off (Phase-1) | +7,055 | 20.1% | 1.00× |
+| | **above_current** | **+2,483** | **20.1%** | **1.84×** |
+| SHORTAGE (inward) @30 | off (Phase-1) | +18,000 | 3.9% | 1.00× |
+| | **above_current** | **+15,980** | **3.9%** | **1.25×** |
+
+`above_current` holds income-loss at the Phase-1 baseline (20.1% / 3.9%) while landing workers in 1.84×/1.25× higher-employment destinations. **Effect is outward-dominant** (inward is **modestly affected, not flat** — share 1.00×→1.25×; the earlier "flat inward" was a DE+HR imputed-income artifact). The **`band=b` sweep is retained in the code and reported in the SI as a robustness variant**: results are monotone across bands (off→share_only), conclusions don't hinge on the exact rule, and the parameter-free above-current rule is the conservative reading of the paper's existing income-preference assumption.
+
 ---
 
 ## 7. Change-scope table (Tasks A–E)
@@ -209,6 +232,7 @@ Three gated phases + a git step 0. Effort excludes long runs. **Resolved decisio
 - Fix hardcoded `/Users/go82gax/...` paths.
 - Consolidate requirements → one pinned env; delete `=*` junk.
 - End-to-end seeding (one configurable seed).
+- **Codify the income-eligibility filter** (NEW, from Task B): the income-subset exclusion currently lives only in notebook-06 (`iso_missing_earnings`) and was found to have drifted from notebook-01's list (by the sim-excluded {SI,BG,MT}). Lift it into `src/` as a single enforced filter (single source of truth) inherited automatically by notebook-06, the Task B sweep, and the cost analysis (Task C). **Codifies the existing reporting filter; changes no published number.**
 
 ### Resolved ⚖️ decisions
 1. Stash patch → `~/reskilling-old-wip.patch`.

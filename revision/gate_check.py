@@ -79,9 +79,12 @@ def main():
 
     lfs = assemble_lfs_data()
     rp = ReskillingPathways(osm_version="weighted", sim_metric="cooc", lfs_data=lfs, year=2023)
-    # review-copy was generated before the journey-aware correction, so the regression
-    # against the frozen reference must use baseline-only behaviour.
+    # review-copy predates both behaviour changes, so the regression against the frozen
+    # reference must disable them: baseline-only skill filter (Task A) AND top-income
+    # destination pick (Task B "off"). These are the disable switches; both must collapse
+    # the model exactly to Phase-1.
     rp.journey_aware = False
+    rp.destination_weighting = "off"
 
     print(f"GATE: countries={countries} journey={JOURNEY} thresholds={THRESH} scenario={SCENARIO} (journey_aware=False)")
     rows = []
