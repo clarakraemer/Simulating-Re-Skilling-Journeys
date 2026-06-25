@@ -1855,8 +1855,9 @@ class ReskillingPathways:
                     .unique()
                     .tolist()
                 )
-                print(f"[DEBUG] country={country}  LFS NUTS_IDs: {raw_codes}")
-                print(f"[DEBUG] country={country}  GeoData NUTS_IDs: {valid_nuts2}")
+                if verbose:
+                    print(f"[DEBUG] country={country}  LFS NUTS_IDs: {raw_codes}")
+                    print(f"[DEBUG] country={country}  GeoData NUTS_IDs: {valid_nuts2}")
 
                 # restrict jobs_by_regions_countries to this country only
                 jobs_by_regions = jobs_by_regions_countries[
@@ -1889,7 +1890,8 @@ class ReskillingPathways:
                     f" Missing annual_earnings in df_occs for country {country}. "
                     "Did the LFS get re-preprocessed without earnings?"
                 )
-                print(f"[DEBUG] annual_earnings present in df_occs ({len(df_occs)} rows)")
+                if verbose:
+                    print(f"[DEBUG] annual_earnings present in df_occs ({len(df_occs)} rows)")
 
 
                 # -------------------------------------------------------------------------
@@ -2025,8 +2027,9 @@ class ReskillingPathways:
 
 
                             # how many raw vs. pre-merge filtered targets?
-                            print(f"[DEBUG1] NUTS2 {nuts_code}: raw targets = {len(target_occs)}, "
-                                  f"pre-merge filtered = {len(target_occs_filtered)}")
+                            if verbose:
+                                print(f"[DEBUG1] NUTS2 {nuts_code}: raw targets = {len(target_occs)}, "
+                                      f"pre-merge filtered = {len(target_occs_filtered)}")
 
                             # only keep occupations that actually exist in this NUTS2
                             if region_constraints:
@@ -2037,7 +2040,8 @@ class ReskillingPathways:
                                     how="inner",  # switch to left for absorptive constraint
                                 ).drop(columns=["ISCO08_3D"])
                                 # how many survive the region‐filter merge?
-                                print(f"[DEBUG2] NUTS2 {nuts_code}: post-merge filtered = {len(target_occs_filtered)}")
+                                if verbose:
+                                    print(f"[DEBUG2] NUTS2 {nuts_code}: post-merge filtered = {len(target_occs_filtered)}")
 
                                 # for all countries where wage data is available, potential
                             #  target occupations are ranked by wage. in all other cases,
@@ -2062,12 +2066,13 @@ class ReskillingPathways:
                             src_workers = src_workers.sample(frac=1, random_state=42) #NEW: random_date added
 
                             # check if viable transitions exists
-                            print(f"[DBG] region {nuts_code}: src_workers={len(src_workers)}, "
-                                  f"raw targets={len(target_occs)}, "
-                                  f"filtered targets={len(target_occs_filtered)}, "
-                                  f"q_viable={q_viable:.3f}, "
-                                  f"sim_min={target_occs['similarity'].min():.3f}, "
-                                  f"sim_max={target_occs['similarity'].max():.3f}")
+                            if verbose:
+                                print(f"[DBG] region {nuts_code}: src_workers={len(src_workers)}, "
+                                      f"raw targets={len(target_occs)}, "
+                                      f"filtered targets={len(target_occs_filtered)}, "
+                                      f"q_viable={q_viable:.3f}, "
+                                      f"sim_min={target_occs['similarity'].min():.3f}, "
+                                      f"sim_max={target_occs['similarity'].max():.3f}")
 
                             # Task B sample capture (read-only side-channel): when enabled
                             # for this step, record the feasible target set (mode-invariant)
@@ -2333,7 +2338,8 @@ class ReskillingPathways:
                                     #transition_number_data.append(src_worker) #OLD
                                     transition_number_data.append(src_worker.to_dict()) #NEW
 
-                    print(f"[DEBUG3] Appending {len(transition_number_data)} worker records for NUTS2 {nuts_code}")
+                    if verbose:
+                        print(f"[DEBUG3] Appending {len(transition_number_data)} worker records for NUTS2 {nuts_code}")
 
                     # end of loop over reskilling journey steps
                     results_by_region[nuts_code] = transition_number_data

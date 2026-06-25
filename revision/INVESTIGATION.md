@@ -313,4 +313,27 @@ Three gated phases + a git step 0. Effort excludes long runs. **Resolved decisio
 
 ---
 
+## 10. Pre-flight checks (before the single full-country run)
+
+The full run is **HELD** pending these + maintainer green-light.
+
+**Silent-corruption**
+1. **Income KEEP-list filter (notebook-06-only until Phase 3).** The model core (`simulate_regional`) prices earnings for **all** countries — it does **not** apply the income KEEP-list. So the run's raw pkls contain income for income-excluded countries (DE, HR, IT, NL, …); the exclusion is applied downstream (notebook-06 `iso_missing_earnings`). **Every income figure derived from the run must be filtered to the KEEP list at reporting** (notebook-06 / the Task B & C income post-processing). Feasibility/intensity columns carry no income and are unaffected. Phase-3 codify removes this footgun. *Status: confirmed — prices everywhere, KEEP downstream only.*
+2. **Seeding.** All 4 full-run programs are deterministic — green/digital coreness-ordered (Task A), coreness_ranked + optimal deterministic; `coreness_weighted` (the only unseeded draw) is commented out of the harness. Worker order seeded (`random_state=42`); Task B destination draws per-draw deterministically seeded. **No unseeded draw remains.** ✓
+3. **Cache freshness.** Loaded fixed inputs (all 2025-09-09, unchanged by A/B/E): `occ_skills_matrix.pkl` (M_os 0.5), `skills_network_metrics.pkl` (coreness, held at 0.5 — feasibility-only D), tailored `upskilling_best_100…csv` (held at 0.5). M_oo (`df_occ_sim`) recomputed in `__init__`, not loaded stale. Per-weight M_os(w) for the D sweep rebuilt **in memory** (`set_weight`), never from a stale pkl. A/B need no matrix regeneration. **Nothing stale.** ✓
+4. **Config drift.** Harness `rp = ReskillingPathways(...)` and the `simulate_regional` call pass **no** behaviour overrides ⇒ committed defaults; confirmed at runtime: `journey_aware=True, destination_weighting=share_income_acceptable/above_current, weight 0.5, symmetric off`. ✓ **ACTION ITEM:** harness has `scenarios = ["shortage"]` (at_risk/high_carbon commented) — **uncomment `at_risk`** for the full run or the outward figures won't regenerate.
+
+**Wasted-run**
+5. **All-country smoke pass** (journey-1, 27 countries, 4 programs × 2 flows × {regC,no-regC}, committed defaults): _see `revision/preflight_smoke.py` — result pending/attached._
+6. **Tightened wall-clock** (journey-30, full pool): anchored on DE/shortage/no-regC = 182 s (transferable) / 565 s (tailored); pool = 11.2× DE; tailored-driven (~3× transferable) at every weight. Main run (weight 0.5, 4 prog × 2 flow × {regC,no-regC}) ≈ **~14–18 h**; Task D inward SI sweep (weights 0, 1.0) ≈ **~6–15 h**; **Task E = ~0 h (post-processable** — only non-reacher income changes, feasibility identical). Levers: tailored is the ~50% bottleneck; outward saturates by step ~8 (run outward to journey-12, inward to 30).
+7. **Run hygiene.** Disk 254 GiB free (42% used); output volume est. a few GB — ample. Full-run launch must use `caffeinate -i` + `nohup` + tee'd disk log (in the run command). ✓
+
+**Trust — interpretable post-run diff vs frozen `review-copy`**
+8. With disable switches off the model reproduces review-copy exactly (gate-validated). In the MAIN run (committed defaults):
+   - **Must still match review-copy (in-run Phase-1 regression):** `optimal` (tailored) **no-regC** decision **and** income columns — Task A doesn't touch tailored, Task B is regC-only — so optimal/no-regC is the clean in-run baseline check.
+   - **Expected to move:** `coreness_ranked` feasibility/intensity (Task A journey-aware: ~0%@4, −2.4%@12, +2.2%@20); `green`/`digital` entirely (now deterministic vs review-copy's random — distributional only there); **all regC income** columns (Task B above_current — feasibility unchanged, earnings_delta changes), including tailored regC income.
+   - **Variant runs** (`_optw0/1`, `_symE`): differ by construction; not compared to review-copy.
+
+---
+
 *Investigation was read-only. Implementation begins at Step 0 on branch `revision`; the maintainer reviews at the Phase 1 gate before any Phase 2 change.*
