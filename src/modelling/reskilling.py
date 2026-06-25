@@ -1,4 +1,5 @@
 import os
+import zlib
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -62,6 +63,24 @@ class ReskillingPathways:
         # behind this switch for the regression test and the SI robustness comparison.
         # Set rp.journey_aware = False to reproduce the pre-correction (baseline-only) runs.
         self.journey_aware = True
+
+        # Task B (employment-share weighting of destinations). regC-only (only the
+        # regional path carries the per-target NUTS-2 employment count). Shipping default
+        # is the parameter-free "above-current wage floor": among targets paying at least
+        # the worker's current wage -- the income-preference assumption already stated in
+        # the paper -- draw by NUTS-2 employment share; fall back to all feasible if none
+        # qualify. Chosen over a band rule (no unmotivated "why 25%?" parameter) and
+        # validated on income-eligible countries (preserves the baseline income-loss
+        # share while delivering ~the reviewer-requested employment-realism gain).
+        #   "off"  -> top-income argmax (deterministic) == Phase-1            [disable switch]
+        #   "share_income_acceptable" with acceptability=
+        #        "above_current" (DEFAULT, parameter-free): share-draw among targets >= current wage
+        #        "band"          (SI robustness):           share-draw within income_band of best income
+        #   "share_only" -> share-draw, income ignored (upper bound, not shipped)
+        self.destination_weighting = "share_income_acceptable"
+        self.acceptability = "above_current"
+        self.income_band = 0.25   # used only when acceptability=="band" (SI robustness sweep)
+        self.share_seed = 42
 
         # phaseout scenario implementations
         #self.phaseout_scenarios = ["coal", "brown_techchange", "brown"] # OLD
@@ -1446,6 +1465,55 @@ class ReskillingPathways:
             return rem[0]
         return rem[skill_rank - 1] if (skill_rank - 1) < len(rem) else None
 
+    @staticmethod
+    def _draw_seed(base_seed, step, nuts_code, widx):
+        """Deterministic per-draw seed. Because each destination draw is seeded from its
+        own (base_seed, step, region, worker-index) key — not a single advancing RNG —
+        the draw is independent of iteration order, so a live run and a post-hoc
+        replay on the captured feasible set produce byte-identical choices. Uses a
+        stable hash (not Python's salted hash) so it is reproducible across processes."""
+        key = f"{int(base_seed)}|{int(step)}|{nuts_code}|{int(widx)}".encode()
+        return zlib.crc32(key) & 0xFFFFFFFF
+
+    def _select_destination(self, targets, src_worker, draw_seed):
+        """Task B: choose the destination occupation among feasible targets.
+
+        `targets` is the feasible set, already sorted by annual_earnings descending and
+        (regional path only) merged with the NUTS-2 employment count column ``COEFFY``.
+        Returns ``(target_row, income_rank)``. Modes (``self.destination_weighting``):
+          * ``"off"``  -> the single top-income target (deterministic) == Phase-1.
+          * ``"share_only"`` -> draw a target with probability proportional to its NUTS-2
+            employment share (``COEFFY``); income is ignored in the choice.
+          * ``"share_income_acceptable"`` -> draw proportional to employment share among
+            income-acceptable targets (band of best income, or above-current); if none
+            qualify, fall back to the full feasible set.
+        ``draw_seed`` (from ``_draw_seed``) makes the draw deterministic and order-
+        independent. ``income_rank`` is the chosen target's income position (1 = top).
+        """
+        mode = getattr(self, "destination_weighting", "off")
+        if mode == "off" or len(targets) <= 1 or "COEFFY" not in targets.columns:
+            return targets.iloc[0], 1
+        pool = targets
+        if mode == "share_income_acceptable":
+            # The acceptable set is the modelling choice (swept on the sample). Two rules:
+            #   acceptability="band"          -> earnings >= (1 - income_band) * best feasible
+            #                                    (band=0 -> top only ~ off; band=1 -> all ~ share_only)
+            #   acceptability="above_current" -> earnings >= the worker's current earnings
+            if getattr(self, "acceptability", "band") == "above_current":
+                acc = targets[targets["annual_earnings"] >= src_worker["annual_earnings"]]
+            else:
+                band = getattr(self, "income_band", 0.0)
+                thr = (1.0 - band) * float(targets["annual_earnings"].max())
+                acc = targets[targets["annual_earnings"] >= thr]
+            if len(acc) > 0:
+                pool = acc
+        w = np.asarray(pool["COEFFY"], dtype=float)
+        if not np.isfinite(w).all() or w.sum() <= 0:
+            return targets.iloc[0], 1  # degenerate weights -> fall back to top income
+        chosen = pool.iloc[int(np.random.RandomState(draw_seed).choice(len(pool), p=w / w.sum()))]
+        rank = int((targets["annual_earnings"] > chosen["annual_earnings"]).sum()) + 1
+        return chosen, rank
+
     def reskill(
         self,
         idx_occ,
@@ -1674,6 +1742,11 @@ class ReskillingPathways:
         else:
             q_viable, q_highly_viable = transition_thresholds
         print("Viability thresholds:", q_viable, q_highly_viable)
+
+        # Task B: destination draws are seeded per-draw (see _draw_seed), so no shared
+        # RNG state is needed and the draw is order-independent. _capture is the
+        # read-only side-channel for the Task B sample sweep / validation.
+        self._capture = []
 
         # create output dir and fnames
         reg_constraint_str = "regC" if region_constraints else "no-regC"
@@ -1962,12 +2035,32 @@ class ReskillingPathways:
                                   f"sim_min={target_occs['similarity'].min():.3f}, "
                                   f"sim_max={target_occs['similarity'].max():.3f}")
 
+                            # Task B sample capture (read-only side-channel): when enabled
+                            # for this step, record the feasible target set (mode-invariant)
+                            # plus, per worker, the (deterministic) draw seed and the choice
+                            # this run actually made. The post-hoc sweep recomputes choices
+                            # from the feasible set + seed; capturing the live choice here
+                            # lets the validation assert post-hoc == live exactly.
+                            cap_entry = None
+                            if (getattr(self, "_capture_at_step", None) == step
+                                    and region_constraints and "COEFFY" in target_occs_filtered.columns
+                                    and not target_occs_filtered.empty):
+                                cap_entry = {
+                                    "scenario": scenario, "country": country,
+                                    "nuts": nuts_code, "step": step,
+                                    "weight_col": coeffy_weight,
+                                    "targets": target_occs_filtered[
+                                        ["code", "annual_earnings", "COEFFY"]].reset_index(drop=True).copy(),
+                                    "choices": [],
+                                }
+                                self._capture.append(cap_entry)
+
                             if not target_occs_filtered.empty:
                                 if region_constraints:
                                     # -----------------------------------------------------
                                     # Worker loop (#5a): individual, region‐constrained
                                     # -----------------------------------------------------
-                                    for _, src_worker in src_workers.iterrows():
+                                    for widx, (_, src_worker) in enumerate(src_workers.iterrows()):
 
                                         # NEW: Always stamp the skill just added
                                         if reskilling == "optimal" and added_skill is not None:
@@ -1983,8 +2076,24 @@ class ReskillingPathways:
 
                                         rank = 1
                                         while rank <= n_targets:
-                                            # pick the rank-th best target
-                                            target = target_occs_filtered.iloc[rank - 1]
+                                            # Task B: choose the destination. "off" returns
+                                            # the top-income target (== Phase-1); the share
+                                            # modes draw one weighted by NUTS-2 employment
+                                            # share (COEFFY), seeded deterministically per draw.
+                                            draw_seed = self._draw_seed(
+                                                getattr(self, "share_seed", 42), step, nuts_code, widx
+                                            )
+                                            target, rank = self._select_destination(
+                                                target_occs_filtered, src_worker, draw_seed
+                                            )
+                                            if cap_entry is not None:
+                                                cap_entry["choices"].append({
+                                                    "widx": widx,
+                                                    "earn": float(src_worker["annual_earnings"]),
+                                                    "w": float(src_worker[coeffy_weight]),
+                                                    "seed": int(draw_seed),
+                                                    "chosen": target["code"],
+                                                })
 
                                                 # — everyone takes their top‐ranked viable job —
                                             src_worker[f"transition_viable_step_{step}"] = True
