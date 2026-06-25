@@ -334,6 +334,13 @@ The full run is **HELD** pending these + maintainer green-light.
    - **Expected to move:** `coreness_ranked` feasibility/intensity (Task A journey-aware: ~0%@4, −2.4%@12, +2.2%@20); `green`/`digital` entirely (now deterministic vs review-copy's random — distributional only there); **all regC income** columns (Task B above_current — feasibility unchanged, earnings_delta changes), including tailored regC income.
    - **Variant runs** (`_optw0/1`, `_symE`): differ by construction; not compared to review-copy.
 
+### 10.1 Pre-flight follow-ups (target hardware + firmed soft checks)
+
+- **Hardware / GPU (projection was wrong-hardware).** The full run executes on a **GPU server** (not local). But there is **no GPU dispatch in `src/`** (no cupy/torch/numba.cuda; the hot path — `find_closest`, `reskill`'s `np.dot`, the per-worker loop — is plain numpy/pandas). So **the GPU sits idle; the server is a faster CPU only.** The ~58–90 h local projection and the country-parallelism recommendation are therefore **not trusted** — re-benchmark on the server first (`revision/server_benchmark.py`, includes a GPU/backend probe + per-step timing). **Do not build parallelism** until the server rate is known (on a single-GPU box, per-country processes may even contend). It may already be an overnight run on the server.
+- **Check 1 firmed (per-output income KEEP filter).** Audited every new output: `taskC_cost.py` asserts income-free (journey-only); `taskD_inward.py` / `before_after_focused.py` report intensity, not income; **`taskB_sweep.py` emitted income with NO KEEP filter** — the exact gap that produced the invalid DE+HR income column — now **fixed** (explicit `INCOME_KEEP` set drops income-excluded countries, regardless of input). Pre-existing figures still get KEEP via notebook-06. *Any future income-bearing output must apply KEEP until the Phase-3 codify.*
+- **Check 4 fixed.** Harness `scenarios` changed `["shortage"]` → **`["at_risk", "shortage"]`** so the outward (headline) flow is not silently skipped. Verified the harness now loops both; at_risk runs cleanly (smoke pass).
+- **Earnings-panel toggle: deferred to post-run review.** The auto-attached earnings `ax2`/`ax4` are 25 interleaved references across ~290 lines of the 2-/4-panel plotter; a default-off toggle can't be safely verified without rendered output. Done at the post-run figure review (testable), not as a blind pre-run edit.
+
 ---
 
 *Investigation was read-only. Implementation begins at Step 0 on branch `revision`; the maintainer reviews at the Phase 1 gate before any Phase 2 change.*

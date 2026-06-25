@@ -3676,7 +3676,10 @@ if __name__ == "__main__":
     ]
 
     # transition pools to analyse
-    scenarios = ["shortage"]  # ["at_risk", "high_carbon", "shortage"]
+    # Both published flows: at_risk (outward, the headline figures) AND shortage (inward).
+    # Running shortage alone would silently drop the entire outward flow. high_carbon is an
+    # alternative outward definition — add it here if the SI needs it.
+    scenarios = ["at_risk", "shortage"]  # was ["shortage"] — outward must not be skipped
 
     # reskilling options to consider
     reskilling_modes = [

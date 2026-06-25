@@ -93,12 +93,26 @@ def sweep(cap):
         print(f"{label:14} {mean:9.0f} {med:9.0f} {p25:8.0f} {p75:8.0f} "
               f"{loss*100:5.1f}% {msh:11.1f} {msh/off_share:5.2f}x")
 
+# Income-eligible countries (>=20% observed earnings) — the notebook-01/06 KEEP list.
+# This sweep reports an INCOME column, so it must NOT price income-excluded countries
+# (DE/HR/IT/NL/…). The model core prices everyone and the KEEP filter lives only in
+# notebook-06 until the Phase-3 codify, so we enforce it HERE explicitly — this is the
+# exact gap that produced an invalid income column on the first (DE+HR) Task B sweep.
+INCOME_KEEP = {"SE", "CH", "SK", "DK", "FR", "EE", "EL", "IE", "NO", "FI", "PT", "LU"}
+
 def main():
     for scen in ["at_risk", "shortage"]:
         p = f"/tmp/taskB_cap_{scen}.pkl"
         if not os.path.exists(p):
             print(f"[{scen}] capture {p} not found — run taskB_capture.py"); continue
-        d = pd.read_pickle(p); cap = d["capture"]
+        d = pd.read_pickle(p); cap_all = d["capture"]
+        dropped = sorted({c["country"] for c in cap_all if c["country"] not in INCOME_KEEP})
+        cap = [c for c in cap_all if c["country"] in INCOME_KEEP]
+        if dropped:
+            print(f"[{scen}] KEEP-filter dropped income-excluded countries: {dropped}")
+        if not cap:
+            print(f"[{scen}] no income-eligible countries in capture — income column would be invalid; skipping")
+            continue
         nch = sum(len(c["choices"]) for c in cap)
         nmt = sum(len(c["choices"]) for c in cap if len(c["targets"]) >= 2)
         print(f"\n=== {scen.upper()} @ step {d['step']}  ({len(cap)} regions, {nch} worker-choices, "
