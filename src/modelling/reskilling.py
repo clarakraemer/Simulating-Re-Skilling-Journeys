@@ -3710,14 +3710,14 @@ if __name__ == "__main__":
     # consideration of regional mobility constraints
     regional_constraints = [True, False] # [True, False]
 
-    # length of reskilling journey — 30 for ALL flows, matching how review-copy was
-    # generated. (A per-flow outward=20 optimisation was tested and REVERTED: per-step
-    # columns 0-20 are bit-identical at journey 20 vs 30, but the result's population/share
-    # aggregate columns — COEFFY, NOBS, COEFFY_share_* — come out journey-length-dependent,
-    # and the EU-aggregate figures weight by COEFFY, so journey-20 outward could diverge
-    # from the frozen reference. Known-good = 30 everywhere.)
-    reskilling_journey_length = 30
-    steps = np.arange(0, reskilling_journey_length + 1)
+    # length of reskilling journey, PER FLOW — matching how the published reference was
+    # generated: at_risk (outward) at 20, shortage (inward) at 30. CONFIRMED from
+    # review-copy: every at_risk pkl has step columns 0..20, every shortage pkl 0..30.
+    # This matters because the result's population/share aggregates (COEFFY, NOBS,
+    # COEFFY_share_*) are journey-length-dependent and the EU figures weight by them, so
+    # running at_risk at 30 would NOT reconcile with the reference outward figures.
+    # (Set inside the scenario loop below.)
+    JOURNEY_BY_FLOW = {"at_risk": 20, "high_carbon": 20, "shortage": 30}
 
     # name mapping
     processing_dict = dict(zip(transition_thresholds, shortcuts))
@@ -3736,6 +3736,10 @@ if __name__ == "__main__":
         }
 
         for scenario in scenarios:
+            # per-flow journey length + steps (outward at_risk=20, inward shortage=30),
+            # matching the published reference.
+            reskilling_journey_length = JOURNEY_BY_FLOW.get(scenario, 30)
+            steps = np.arange(0, reskilling_journey_length + 1)
             print(f"[CONFIG] scenario={scenario}  journey={reskilling_journey_length}")
 
             # 1) Build a scenario-specific base results dir
