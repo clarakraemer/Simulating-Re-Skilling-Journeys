@@ -126,8 +126,12 @@ def save_like_serial(scenario, program, regc, weight, symmetric, scenario_result
     """Pickle {scenario: {country: df}} to the exact serial path + a run_metadata.json
     sidecar matching the one simulate_regional writes for the default run."""
     path, dirname = out_path(scenario, program, regc, weight, symmetric)
-    with open(path, "wb") as h:
+    # Atomic: write to a temp file then rename, so a crash mid-write never leaves a
+    # half-written pkl that the resume-skip would wrongly trust as complete.
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as h:
         pickle.dump({scenario: scenario_results}, h, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(tmp, path)
     try:
         with open(os.path.join(os.path.dirname(path), "run_metadata.json"), "w") as mh:
             json.dump({"program": _RP.simulation_name[program],
@@ -218,26 +222,37 @@ def correctness_test(countries, workers, journey=None, weight=0.5, symmetric=Fal
 
 def full_run(countries, workers, weight=0.5, symmetric=False):
     _init()
-    tasks = [Task(s, p, r, c, JOURNEY_BY_FLOW[s], weight, symmetric)
-             for s in SCENARIOS for p in PROGRAMS for r in REGCS for c in countries]
+    # One combo = one (scenario, program, regC) output pkl. We process combos sequentially
+    # but parallelise the 27 countries WITHIN each combo, and SAVE as soon as a combo's
+    # countries finish. This gives: (a) crash-resilience — a crash loses only the in-flight
+    # combo, never finished ones; (b) resume — re-running the same command SKIPS combos whose
+    # pkl already exists; (c) live progress — one [SAVED] line per combo across the run.
+    # chunksize=1 hands one country at a time, so heavy countries (DE/FR/IT shortage-30)
+    # spread across workers instead of clumping into one chunk — shorter tail.
+    combos = [(s, p, r) for s in SCENARIOS for p in PROGRAMS for r in REGCS]
     print(f"[CONFIG] per-flow journey {JOURNEY_BY_FLOW} | journey_aware={getattr(_RP,'journey_aware',None)} "
           f"| destination_weighting={getattr(_RP,'destination_weighting',None)} "
           f"| optional_weight={weight} | symmetric_employment={symmetric} | thresholds={THRESH}", flush=True)
-    print(f"[PARALLEL] {len(tasks)} (scenario,program,regC,country) tasks on {workers} workers "
+    print(f"[PARALLEL] {len(combos)} combos x {len(countries)} countries on {workers} workers "
           f"| BLAS threads/worker={os.environ.get('OMP_NUM_THREADS')}", flush=True)
     pool = mp.Pool(workers, initializer=_init_worker)
+    done = skipped = 0
     try:
-        results = pool.map(run_one, tasks)
+        for i, (s, p, r) in enumerate(combos, 1):
+            path, dirname = out_path(s, p, r, weight, symmetric)
+            if os.path.exists(path):
+                print(f"[SKIP {i}/{len(combos)}] {dirname} (already on disk — resume)", flush=True)
+                skipped += 1
+                continue
+            tasks = [Task(s, p, r, c, JOURNEY_BY_FLOW[s], weight, symmetric) for c in countries]
+            per = {t.country: df for t, df in pool.map(run_one, tasks, chunksize=1)}
+            sr = assemble(per, countries)
+            save_like_serial(s, p, r, weight, symmetric, sr)
+            done += 1
+            print(f"[SAVED {i}/{len(combos)}] {os.path.relpath(path, ROOT)}  ({len(sr)} countries)", flush=True)
     finally:
         pool.close(); pool.join()
-    grp = defaultdict(dict)
-    for t, df in results:
-        grp[(t.scenario, t.program, t.regc)][t.country] = df
-    for (s, p, r), per in grp.items():
-        sr = assemble(per, countries)
-        path = save_like_serial(s, p, r, weight, symmetric, sr)
-        print(f"[SAVED] {os.path.relpath(path, ROOT)}  ({len(sr)} countries)", flush=True)
-    print("[DONE] full parallel run complete", flush=True)
+    print(f"[DONE] full parallel run complete — {done} saved, {skipped} skipped this invocation", flush=True)
 
 if __name__ == "__main__":
     try: mp.set_start_method("spawn")  # fresh workers (no fork-after-BLAS deadlock)
