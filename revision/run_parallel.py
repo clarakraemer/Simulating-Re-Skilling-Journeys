@@ -60,7 +60,7 @@ DEC_PREFIX = ("n_viable_transitions_step_", "transition_viable_step_",
 # Carry EVERY run parameter inside the task: spawn workers re-import the module fresh and do
 # NOT inherit parent-side mutations of module globals, so anything that varies per run must
 # travel in the picklable task, never via a global the parent mutated.
-Task = namedtuple("Task", "scenario program regc country journey weight symmetric")
+Task = namedtuple("Task", "scenario program regc country journey weight symmetric threshold")
 
 _RP = None
 
@@ -84,7 +84,7 @@ def _simulate(countries, t):
             transition_optimisation="wage", reskilling=t.program,
             reskilling_journey_length=t.journey, region_constraints=t.regc,
             target_job_availability_coeffy="COEFFY_mean+sd", mask_diagonal=True,
-            transition_thresholds=THRESH, optional_weight=t.weight,
+            transition_thresholds=t.threshold, optional_weight=t.weight,
             symmetric_employment=t.symmetric, out_dir=tmp)
         return res.get(t.scenario, {})
     finally:
@@ -122,7 +122,7 @@ def out_path(scenario, program, regc, weight=0.5, symmetric=False):
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, f"{dirname}.pkl"), dirname
 
-def save_like_serial(scenario, program, regc, weight, symmetric, scenario_results):
+def save_like_serial(scenario, program, regc, weight, symmetric, scenario_results, threshold=THRESH):
     """Pickle {scenario: {country: df}} to the exact serial path + a run_metadata.json
     sidecar matching the one simulate_regional writes for the default run."""
     path, dirname = out_path(scenario, program, regc, weight, symmetric)
@@ -138,7 +138,7 @@ def save_like_serial(scenario, program, regc, weight, symmetric, scenario_result
                        "transition_optimisation": "wage", "region_constraints": regc,
                        "year": _RP.year, "optional_weight": float(weight),
                        "symmetric_employment": bool(symmetric),
-                       "q_viable": float(THRESH[0]), "q_highly_viable": float(THRESH[1]),
+                       "q_viable": float(threshold[0]), "q_highly_viable": float(threshold[1]),
                        "journey_aware": getattr(_RP, "journey_aware", None),
                        "destination_weighting": getattr(_RP, "destination_weighting", None),
                        "produced_by": "revision/run_parallel.py"}, mh, indent=2)
@@ -196,7 +196,7 @@ def correctness_test(countries, workers, journey=None, weight=0.5, symmetric=Fal
         for scen, prog, regc in combos:
             j = journey if journey is not None else JOURNEY_BY_FLOW[scen]
             base = dict(scenario=scen, program=prog, regc=regc, journey=j,
-                        weight=weight, symmetric=symmetric)
+                        weight=weight, symmetric=symmetric, threshold=THRESH)
             ser = assemble(serial_combo(countries, Task(country=None, **base)), countries)
             tasks = [Task(country=c, **base) for c in countries]
             per = {t.country: df for t, df in pool.map(run_one, tasks)}
@@ -220,8 +220,12 @@ def correctness_test(countries, workers, journey=None, weight=0.5, symmetric=Fal
           if bad == 0 else "FAILED — do NOT run the full parallel job")
     return bad == 0
 
-def full_run(countries, workers, weight=0.5, symmetric=False):
+def full_run(countries, workers, weight=0.5, symmetric=False,
+             scenarios=None, regcs=None, threshold=None):
     _init()
+    scenarios = scenarios or SCENARIOS
+    regcs = REGCS if regcs is None else regcs
+    threshold = threshold or THRESH
     # One combo = one (scenario, program, regC) output pkl. We process combos sequentially
     # but parallelise the 27 countries WITHIN each combo, and SAVE as soon as a combo's
     # countries finish. This gives: (a) crash-resilience — a crash loses only the in-flight
@@ -229,10 +233,11 @@ def full_run(countries, workers, weight=0.5, symmetric=False):
     # pkl already exists; (c) live progress — one [SAVED] line per combo across the run.
     # chunksize=1 hands one country at a time, so heavy countries (DE/FR/IT shortage-30)
     # spread across workers instead of clumping into one chunk — shorter tail.
-    combos = [(s, p, r) for s in SCENARIOS for p in PROGRAMS for r in REGCS]
-    print(f"[CONFIG] per-flow journey {JOURNEY_BY_FLOW} | journey_aware={getattr(_RP,'journey_aware',None)} "
+    combos = [(s, p, r) for s in scenarios for p in PROGRAMS for r in regcs]
+    print(f"[CONFIG] scenarios={scenarios} regC={regcs} | per-flow journey {JOURNEY_BY_FLOW} "
+          f"| journey_aware={getattr(_RP,'journey_aware',None)} "
           f"| destination_weighting={getattr(_RP,'destination_weighting',None)} "
-          f"| optional_weight={weight} | symmetric_employment={symmetric} | thresholds={THRESH}", flush=True)
+          f"| optional_weight={weight} | symmetric_employment={symmetric} | thresholds={threshold}", flush=True)
     print(f"[PARALLEL] {len(combos)} combos x {len(countries)} countries on {workers} workers "
           f"| BLAS threads/worker={os.environ.get('OMP_NUM_THREADS')}", flush=True)
     pool = mp.Pool(workers, initializer=_init_worker)
@@ -244,10 +249,10 @@ def full_run(countries, workers, weight=0.5, symmetric=False):
                 print(f"[SKIP {i}/{len(combos)}] {dirname} (already on disk — resume)", flush=True)
                 skipped += 1
                 continue
-            tasks = [Task(s, p, r, c, JOURNEY_BY_FLOW[s], weight, symmetric) for c in countries]
+            tasks = [Task(s, p, r, c, JOURNEY_BY_FLOW[s], weight, symmetric, threshold) for c in countries]
             per = {t.country: df for t, df in pool.map(run_one, tasks, chunksize=1)}
             sr = assemble(per, countries)
-            save_like_serial(s, p, r, weight, symmetric, sr)
+            save_like_serial(s, p, r, weight, symmetric, sr, threshold=threshold)
             done += 1
             print(f"[SAVED {i}/{len(combos)}] {os.path.relpath(path, ROOT)}  ({len(sr)} countries)", flush=True)
     finally:
@@ -268,11 +273,23 @@ if __name__ == "__main__":
                     help="weight of OPTIONAL skills in M_os (default 0.5). Task-D sweep: 0, 1.0.")
     ap.add_argument("--symmetric", action="store_true",
                     help="Task-E: apply the outward unemployment rule to BOTH flows.")
+    ap.add_argument("--scenarios", default=None,
+                    help="comma list to scope the run, e.g. 'shortage' (Task-D inward) or "
+                         "'at_risk,shortage' (default both).")
+    ap.add_argument("--regc", choices=["both", "true", "false"], default="both",
+                    help="scope regional constraint: 'true' = regC only (Task-D SI), default both.")
+    ap.add_argument("--threshold", default=None,
+                    help="'q_viable,q_highly_viable' feasibility pair (per-weight for Task-D); "
+                         "default is the production (3.68,10.80). MUST be the weight's re-derived pair.")
     a = ap.parse_args()
+    thr = tuple(float(x) for x in a.threshold.split(",")) if a.threshold else None
+    scen = a.scenarios.split(",") if a.scenarios else None
+    regcs = {"both": None, "true": [True], "false": [False]}[a.regc]
     if a.test:
         cs = a.countries.split(",") if a.countries else ["SK", "EE", "FI"]
         correctness_test(cs, a.workers, journey=a.journey,
                          weight=a.optional_weight, symmetric=a.symmetric)
     else:
         cs = a.countries.split(",") if a.countries else ALL_COUNTRIES
-        full_run(cs, a.workers, weight=a.optional_weight, symmetric=a.symmetric)
+        full_run(cs, a.workers, weight=a.optional_weight, symmetric=a.symmetric,
+                 scenarios=scen, regcs=regcs, threshold=thr)
