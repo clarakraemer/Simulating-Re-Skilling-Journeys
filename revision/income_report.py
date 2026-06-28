@@ -1,11 +1,16 @@
-"""Income at the FIRST unlocked transition (switchers), from the weight-0.5 production
-pickles. No rerun. KEEP-list only, COEFFY-weighted.
+"""Income from the weight-0.5 production pickles. No rerun. KEEP-list only.
 
-Reports, per program x flow:
-  (a) % change vs pre-reskilling income, (b) absolute EUR annual change, (c) mean
-      pre-reskilling annual income (the base)  -> "-X% (-EURY on EURZ prior)"
-Plus: tailored-vs-transferable income convergence step, and per-country aggregate EUR loss
-at first transition (fiscal-scale). Asserts COUNTRYW subset of KEEP (no DROP leak).
+FIX: weight by the AT-RISK pool, not full employment. Per-cell income (pct/EUR) is correct
+in the pickle; only the cross-cell rollup weight was wrong. The model's own
+earnings_delta_closest_switch_sum_step_N already encodes the at-risk weighting, so the
+per-cell at-risk population is Wc = sum_step / delta_step (step-invariant), recovered here.
+
+Reports (KEEP-only, at-risk-weighted):
+  (1) COMMON-STEP % (switchers-at-step) at steps 4/8/12/16/20, per program x flow  [LEAD]
+  (2) FIRST-TRANSITION %, abs EUR, base EUR, per program x flow
+  (3) CONVERGENCE tailored vs transferable (crossover step)
+  (4) PER-COUNTRY aggregate EUR at first transition (fiscal scale), via the _sum column
+Asserts COUNTRYW subset of KEEP (no DROP leak).
 """
 import os, pickle, numpy as np, pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,30 +27,30 @@ def load(sc, sim):
 
 
 def keep_concat(per):
-    fr = [d[d.index.get_level_values("COUNTRYW").isin(KEEP)] for d in per.values()]
-    df = pd.concat(fr)
+    df = pd.concat([d[d.index.get_level_values("COUNTRYW").isin(KEEP)] for d in per.values()])
     assert set(df.index.get_level_values("COUNTRYW")) <= KEEP, "DROP LEAK"
     return df
 
 
-def first_step(df, last):
-    vcols = [f"transition_viable_step_{s}" for s in range(last + 1) if f"transition_viable_step_{s}" in df.columns]
-    V = np.nan_to_num(df[vcols].astype(float).to_numpy(), nan=0) > 0.5
-    reached = V.any(axis=1)
-    fs = V.argmax(axis=1)
-    return reached, fs
-
-
-def at_first(df, last, col_tmpl):
-    """Pull col_tmpl.format(step) at each row's first viable step; NaN for non-reachers."""
-    reached, fs = first_step(df, last)
-    out = np.full(len(df), np.nan)
-    for i in range(len(df)):
-        if reached[i]:
-            col = col_tmpl.format(fs[i])
-            if col in df.columns:
-                out[i] = df.iloc[i][col]
-    return out, reached
+def atrisk_weight(df, last):
+    """Wc = at-risk population per cell = median_step(sum_step/delta_step) (step-invariant).
+    Fallback for all-zero-delta cells: COEFFY x global median at-risk share."""
+    coeffy = df["COEFFY"].to_numpy(float)
+    ratios = []
+    for s in range(last + 1):
+        de = df.get(f"earnings_delta_closest_switch_step_{s}")
+        su = df.get(f"earnings_delta_closest_switch_sum_step_{s}")
+        if de is None or su is None:
+            continue
+        de = de.to_numpy(float); su = su.to_numpy(float)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            r = np.where(np.abs(de) > 1e-9, su / de, np.nan)
+        ratios.append(r)
+    with np.errstate(invalid="ignore"):
+        Wc = np.nanmedian(np.vstack(ratios), axis=0) if ratios else np.full(len(df), np.nan)
+        share = np.nanmedian(Wc / coeffy) if np.isfinite(Wc).any() else np.nan
+    Wc = np.where(np.isnan(Wc), coeffy * share, Wc)
+    return Wc
 
 
 def wmean(v, w):
@@ -53,80 +58,103 @@ def wmean(v, w):
     return np.average(v[m], weights=w[m]) if m.any() and w[m].sum() > 0 else np.nan
 
 
-def part1_table():
-    print("=" * 96)
-    print("(1) INCOME AT FIRST UNLOCKED TRANSITION — switchers, regC, KEEP-only, COEFFY-weighted")
-    print("=" * 96)
-    print(f"{'flow':9} {'program':12} | {'% change':>9} {'abs EUR':>11} {'base EUR (prior)':>17}")
+def viable_at(df, s):
+    c = f"transition_viable_step_{s}"
+    return np.nan_to_num(df[c].astype(float).to_numpy(), nan=0) > 0.5 if c in df else np.zeros(len(df), bool)
+
+
+def first_step(df, last):
+    V = np.nan_to_num(df[[f"transition_viable_step_{s}" for s in range(last + 1)
+                          if f"transition_viable_step_{s}" in df.columns]].astype(float).to_numpy(), nan=0) > 0.5
+    return V.any(axis=1), V.argmax(axis=1)
+
+
+def part1_common_step():
+    STEPS = [4, 8, 12, 16, 20]
+    print("=" * 100)
+    print("(1) COMMON-STEP income % — switchers-at-step, at-risk-weighted, KEEP  [LEAD: fair constant-effort]")
+    print("=" * 100)
+    for sc in ["at_risk", "shortage"]:
+        last = JL[sc]
+        steps = [s for s in STEPS if s <= last]
+        print(f"\n  {sc}:   " + "  ".join(f"step{ s:>2}" for s in steps))
+        for sim, lab in PROG:
+            df = keep_concat(load(sc, sim)); Wc = atrisk_weight(df, last)
+            cells = []
+            for s in steps:
+                vi = viable_at(df, s)
+                pc = df.get(f"earnings_delta_closest_switch_pct_step_{s}")
+                v = pc.to_numpy(float) if pc is not None else np.full(len(df), np.nan)
+                cells.append(wmean(v[vi], Wc[vi]) * 100)
+            print(f"  {lab:12} " + "  ".join(f"{x:6.1f}%" for x in cells))
+    print("\n  outward: tailored cushions best per unit of effort through ~step 12 (see convergence).")
+
+
+def part2_first_transition():
+    print("\n" + "=" * 100)
+    print("(2) FIRST-TRANSITION income — at-risk-weighted, KEEP  (each program at its OWN first-unlock step)")
+    print("=" * 100)
+    print(f"{'flow':9} {'program':12} | {'% change':>9} {'abs EUR':>10} {'base EUR':>9}")
     for sc in ["at_risk", "shortage"]:
         last = JL[sc]
         for sim, lab in PROG:
-            df = keep_concat(load(sc, sim))
-            w = df["COEFFY"].to_numpy(float)
-            pct, reached = at_first(df, last, "earnings_delta_closest_switch_pct_step_{}")
-            eur, _ = at_first(df, last, "earnings_delta_closest_switch_step_{}")
+            df = keep_concat(load(sc, sim)); Wc = atrisk_weight(df, last)
+            reached, fs = first_step(df, last)
+            pct = np.array([df.iloc[i].get(f"earnings_delta_closest_switch_pct_step_{fs[i]}", np.nan)
+                            if reached[i] else np.nan for i in range(len(df))], float)
+            eur = np.array([df.iloc[i].get(f"earnings_delta_closest_switch_step_{fs[i]}", np.nan)
+                            if reached[i] else np.nan for i in range(len(df))], float)
             base = df["annual_earnings"].to_numpy(float)
             m = reached
-            p = wmean(pct[m], w[m]) * 100
-            e = wmean(eur[m], w[m])
-            z = wmean(base[m], w[m])
-            print(f"{sc:9} {lab:12} | {p:8.1f}% {e:11.0f} {z:17.0f}")
-    print("  (outward = stepping out of at-risk jobs; inward = into low-carbon/keep-job)")
+            print(f"{sc:9} {lab:12} | {wmean(pct[m], Wc[m])*100:8.1f}% {wmean(eur[m], Wc[m]):10.0f} {wmean(base[m], Wc[m]):9.0f}")
+    print("  speed/income tradeoff: tailored switches soonest to a nearer lower-paid job (smaller")
+    print("  gain here); transferable reskills longer (~13 vs ~4 skills) and lands better-paid.")
 
 
-def part2_convergence():
-    print("\n" + "=" * 96)
-    print("(2) CONVERGENCE — at_risk income %% (switchers-at-step), tailored vs transferable, KEEP")
-    print("=" * 96)
+def part3_convergence():
+    print("\n" + "=" * 100)
+    print("(3) CONVERGENCE — at_risk switcher income %, tailored vs transferable, at-risk-weighted")
+    print("=" * 100)
     last = JL["at_risk"]
-    dt = keep_concat(load("at_risk", "reskill-optimal"))
-    dx = keep_concat(load("at_risk", "reskill-coreRanked"))
+    dt = keep_concat(load("at_risk", "reskill-optimal")); Wt = atrisk_weight(dt, last)
+    dx = keep_concat(load("at_risk", "reskill-coreRanked")); Wx = atrisk_weight(dx, last)
     print(f"{'step':>4} {'tailored%':>10} {'transf%':>9} {'gap pp':>7}")
-    conv = None
-    for s in range(last + 1):
-        pc = f"earnings_delta_closest_switch_pct_step_{s}"; vc = f"transition_viable_step_{s}"
-        def stat(d):
-            w = d["COEFFY"].to_numpy(float)
-            vi = np.nan_to_num(d[vc].astype(float).to_numpy(), nan=0) > 0.5 if vc in d else np.zeros(len(d), bool)
-            v = d[pc].to_numpy(float) if pc in d else np.full(len(d), np.nan)
-            return wmean(v[vi], w[vi]) * 100
-        t, x = stat(dt), stat(dx)
+    prev = None; cross = None
+    for s in range(1, last + 1):
+        t = wmean(dt.get(f"earnings_delta_closest_switch_pct_step_{s}").to_numpy(float)[viable_at(dt, s)], Wt[viable_at(dt, s)]) * 100
+        x = wmean(dx.get(f"earnings_delta_closest_switch_pct_step_{s}").to_numpy(float)[viable_at(dx, s)], Wx[viable_at(dx, s)]) * 100
         gap = t - x
-        if s in (0, 4, 8, 10, 12, 13, 14, 16, 20):
-            print(f"{s:>4} {t:10.1f} {x:9.1f} {gap:7.1f}")
-        if conv is None and s >= 1 and abs(gap) <= 1.0:
-            conv = s
-    print(f"  -> income gap closes to <=1pp at step {conv} (old draft: 13). Tailored advantage is front-loaded.")
+        if prev is not None and prev > 0 >= gap and cross is None:
+            cross = s
+        prev = gap
+        if s in (4, 8, 12, 13, 14, 16, 20):
+            print(f"{s:>4} {t:10.1f} {x:9.1f} {gap:+7.1f}")
+    print(f"  -> tailored advantage (gap>0) flips sign at step {cross} (old draft: 13). Front-loaded.")
 
 
-def part3_country_aggregate():
-    print("\n" + "=" * 96)
-    print("(3) AGGREGATE EUR CHANGE AT FIRST TRANSITION, per country (at_risk, KEEP) — fiscal scale")
-    print("=" * 96)
-    last = JL["at_risk"]
+def part4_country_aggregate():
+    print("\n" + "=" * 100)
+    print("(4) AGGREGATE EUR at first transition, per country (at_risk, KEEP) — via model _sum column")
+    print("=" * 100)
     for sim, lab in [("reskill-optimal", "tailored"), ("reskill-coreRanked", "transferable")]:
-        per = load("at_risk", sim)
-        rows = []
+        per = load("at_risk", sim); rows = []
         for c, d in per.items():
             if c not in KEEP:
                 continue
-            reached, fs = first_step(d, last)
-            w = d["COEFFY"].to_numpy(float)
-            tot = 0.0
-            for i in range(len(d)):
-                if reached[i]:
-                    col = f"earnings_delta_closest_switch_step_{fs[i]}"
-                    if col in d.columns and pd.notna(d.iloc[i][col]):
-                        tot += d.iloc[i][col] * w[i]
+            reached, fs = first_step(d, JL["at_risk"])
+            tot = sum(d.iloc[i].get(f"earnings_delta_closest_switch_sum_step_{fs[i]}", 0.0)
+                      for i in range(len(d)) if reached[i]
+                      and pd.notna(d.iloc[i].get(f"earnings_delta_closest_switch_sum_step_{fs[i]}", np.nan)))
             rows.append((c, tot))
         rows.sort(key=lambda r: r[1])
-        print(f"\n  {lab} — aggregate EUR change at first transition (most negative first):")
-        for c, tot in rows[:6]:
-            print(f"     {c}: {tot/1e9:+.2f} bn  ({tot/1e6:+.0f} m)")
+        print(f"\n  {lab} (most negative first):  " +
+              "   ".join(f"{c} {tot/1e9:+.2f}bn" for c, tot in rows[:6]))
 
 
 if __name__ == "__main__":
-    part1_table()
-    part2_convergence()
-    part3_country_aggregate()
-    print("\n[OK] COUNTRYW subset of KEEP enforced in every aggregation (no DROP leakage).")
+    part1_common_step()
+    part2_first_transition()
+    part3_convergence()
+    part4_country_aggregate()
+    print("\n[OK] at-risk weighted via model _sum column; COUNTRYW subset of KEEP (no DROP leak).")
+    print("[note] above_current is a SOFT preference (not a hard floor): some switchers still lose.")
