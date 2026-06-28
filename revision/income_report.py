@@ -70,13 +70,14 @@ def first_step(df, last):
 
 
 def part1_common_step():
-    STEPS = [4, 8, 12, 16, 20]
+    # flow-specific common steps: outward saturates early; inward unlocks ~step 24-26.
+    STEPS = {"at_risk": [4, 8, 12, 16, 20], "shortage": [16, 20, 24, 28, 30]}
     print("=" * 100)
     print("(1) COMMON-STEP income % — switchers-at-step, at-risk-weighted, KEEP  [LEAD: fair constant-effort]")
     print("=" * 100)
     for sc in ["at_risk", "shortage"]:
         last = JL[sc]
-        steps = [s for s in STEPS if s <= last]
+        steps = [s for s in STEPS[sc] if s <= last]
         print(f"\n  {sc}:   " + "  ".join(f"step{ s:>2}" for s in steps))
         for sim, lab in PROG:
             df = keep_concat(load(sc, sim)); Wc = atrisk_weight(df, last)
