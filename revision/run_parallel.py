@@ -69,6 +69,14 @@ def _init():
     if _RP is None:
         _RP = ReskillingPathways(osm_version="weighted", sim_metric="cooc",
                                  lfs_data=assemble_lfs_data(), year=2023)
+    # Spawn-safe overrides via env (parent sets them in __main__ BEFORE the Pool spawns, so
+    # workers inherit them and re-apply on their own _init). Empty/unset => model default.
+    dw = os.environ.get("RSJ_DEST_WEIGHTING")
+    if dw:
+        _RP.destination_weighting = dw
+    ja = os.environ.get("RSJ_JOURNEY_AWARE")
+    if ja in ("0", "1"):
+        _RP.journey_aware = (ja == "1")
 
 def _init_worker():
     """Pool initializer (spawn): each worker loads the model ONCE, fresh — no inherited
@@ -104,7 +112,7 @@ def assemble(per_country, countries):
     identical to how serial's filtered_countries loop inserts them."""
     return {c: per_country[c] for c in countries if per_country.get(c) is not None}
 
-def out_path(scenario, program, regc, weight=0.5, symmetric=False):
+def out_path(scenario, program, regc, weight=0.5, symmetric=False, extra_suffix=""):
     """The EXACT serial output path, reconstructed from the model's OWN attributes (not
     hardcoded), including the `_optw{:g}` / `_symE` variant suffix the model appends for
     non-default robustness runs — so Task-D / Task-E variants self-organise identically."""
@@ -116,16 +124,17 @@ def out_path(scenario, program, regc, weight=0.5, symmetric=False):
         variant += "_optw{:g}".format(weight)
     if symmetric:
         variant += "_symE"
-    dirname += variant
+    dirname += variant + extra_suffix
     sub = SCENARIO_SUFFIX.get(scenario, str(scenario))
     d = os.path.join(useful_paths.figure_dir, "reskilling_simulation", sub, dirname)
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, f"{dirname}.pkl"), dirname
 
-def save_like_serial(scenario, program, regc, weight, symmetric, scenario_results, threshold=THRESH):
+def save_like_serial(scenario, program, regc, weight, symmetric, scenario_results,
+                     threshold=THRESH, extra_suffix=""):
     """Pickle {scenario: {country: df}} to the exact serial path + a run_metadata.json
     sidecar matching the one simulate_regional writes for the default run."""
-    path, dirname = out_path(scenario, program, regc, weight, symmetric)
+    path, dirname = out_path(scenario, program, regc, weight, symmetric, extra_suffix)
     # Atomic: write to a temp file then rename, so a crash mid-write never leaves a
     # half-written pkl that the resume-skip would wrongly trust as complete.
     tmp = path + ".tmp"
@@ -221,7 +230,7 @@ def correctness_test(countries, workers, journey=None, weight=0.5, symmetric=Fal
     return bad == 0
 
 def full_run(countries, workers, weight=0.5, symmetric=False,
-             scenarios=None, regcs=None, threshold=None):
+             scenarios=None, regcs=None, threshold=None, extra_suffix=""):
     _init()
     scenarios = scenarios or SCENARIOS
     regcs = REGCS if regcs is None else regcs
@@ -234,7 +243,7 @@ def full_run(countries, workers, weight=0.5, symmetric=False,
     # chunksize=1 hands one country at a time, so heavy countries (DE/FR/IT shortage-30)
     # spread across workers instead of clumping into one chunk — shorter tail.
     combos = [(s, p, r) for s in scenarios for p in PROGRAMS for r in regcs]
-    print(f"[CONFIG] scenarios={scenarios} regC={regcs} | per-flow journey {JOURNEY_BY_FLOW} "
+    print(f"[CONFIG] scenarios={scenarios} regC={regcs} suffix='{extra_suffix}' | per-flow journey {JOURNEY_BY_FLOW} "
           f"| journey_aware={getattr(_RP,'journey_aware',None)} "
           f"| destination_weighting={getattr(_RP,'destination_weighting',None)} "
           f"| optional_weight={weight} | symmetric_employment={symmetric} | thresholds={threshold}", flush=True)
@@ -244,7 +253,7 @@ def full_run(countries, workers, weight=0.5, symmetric=False,
     done = skipped = 0
     try:
         for i, (s, p, r) in enumerate(combos, 1):
-            path, dirname = out_path(s, p, r, weight, symmetric)
+            path, dirname = out_path(s, p, r, weight, symmetric, extra_suffix)
             if os.path.exists(path):
                 print(f"[SKIP {i}/{len(combos)}] {dirname} (already on disk — resume)", flush=True)
                 skipped += 1
@@ -252,7 +261,7 @@ def full_run(countries, workers, weight=0.5, symmetric=False,
             tasks = [Task(s, p, r, c, JOURNEY_BY_FLOW[s], weight, symmetric, threshold) for c in countries]
             per = {t.country: df for t, df in pool.map(run_one, tasks, chunksize=1)}
             sr = assemble(per, countries)
-            save_like_serial(s, p, r, weight, symmetric, sr, threshold=threshold)
+            save_like_serial(s, p, r, weight, symmetric, sr, threshold=threshold, extra_suffix=extra_suffix)
             done += 1
             print(f"[SAVED {i}/{len(combos)}] {os.path.relpath(path, ROOT)}  ({len(sr)} countries)", flush=True)
     finally:
@@ -281,10 +290,27 @@ if __name__ == "__main__":
     ap.add_argument("--threshold", default=None,
                     help="'q_viable,q_highly_viable' feasibility pair (per-weight for Task-D); "
                          "default is the production (3.68,10.80). MUST be the weight's re-derived pair.")
+    ap.add_argument("--destination-weighting", dest="dest_weighting", default=None,
+                    help="override rp.destination_weighting (e.g. 'off' for the no-weighting "
+                         "counterfactual). 'off' self-organises into a _dwoff/ variant path.")
+    ap.add_argument("--journey-aware", dest="journey_aware", choices=["on", "off"], default=None,
+                    help="override rp.journey_aware. 'off' (the pre-correction behaviour) "
+                         "self-organises into a _jaoff/ variant path; 'on' is the production default.")
     a = ap.parse_args()
     thr = tuple(float(x) for x in a.threshold.split(",")) if a.threshold else None
     scen = a.scenarios.split(",") if a.scenarios else None
     regcs = {"both": None, "true": [True], "false": [False]}[a.regc]
+    # Spawn-safe attribute overrides via env (set BEFORE any Pool spawns) + variant suffix so
+    # diagnostic runs never collide with the weight-0.5 production pickles.
+    suffix = ""
+    if a.dest_weighting:
+        os.environ["RSJ_DEST_WEIGHTING"] = a.dest_weighting
+        if a.dest_weighting == "off":
+            suffix += "_dwoff"
+    if a.journey_aware is not None:
+        os.environ["RSJ_JOURNEY_AWARE"] = "1" if a.journey_aware == "on" else "0"
+        if a.journey_aware == "off":
+            suffix += "_jaoff"
     if a.test:
         cs = a.countries.split(",") if a.countries else ["SK", "EE", "FI"]
         correctness_test(cs, a.workers, journey=a.journey,
@@ -292,4 +318,4 @@ if __name__ == "__main__":
     else:
         cs = a.countries.split(",") if a.countries else ALL_COUNTRIES
         full_run(cs, a.workers, weight=a.optional_weight, symmetric=a.symmetric,
-                 scenarios=scen, regcs=regcs, threshold=thr)
+                 scenarios=scen, regcs=regcs, threshold=thr, extra_suffix=suffix)
