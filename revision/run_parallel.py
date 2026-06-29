@@ -42,6 +42,7 @@ from pandas.testing import assert_frame_equal
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, "src"))
 from src.modelling.reskilling import ReskillingPathways, useful_paths  # noqa
+from src.modelling import occupation_distance  # for fix-A optional-weight M_oo rebuild
 from revision.run_sample import assemble_lfs_data
 
 ALL_COUNTRIES = ["AT","BE","CH","CY","CZ","DE","DK","EL","EE","ES","FI","FR","HR","HU","IE",
@@ -69,6 +70,21 @@ def _init():
     if _RP is None:
         _RP = ReskillingPathways(osm_version="weighted", sim_metric="cooc",
                                  lfs_data=assemble_lfs_data(), year=2023)
+        # FIX (A): simulate_regional's optional_weight is INERT — it never rebuilds the
+        # feasibility M_oo (only names the folder + metadata). So rebuild df_occ_sim here when
+        # the weight != 0.5, using the SAME construction as taskD_threshold (model untouched):
+        # M_os(w) = essential + w*optional ; M_oo = occ_sim_matrix_by_levels(M_os(w)).
+        w = float(os.environ.get("RSJ_OPTIONAL_WEIGHT", "0.5"))
+        if abs(w - 0.5) > 1e-12:
+            osm = _RP.occ_skills_mat
+            ess = (osm.values == 1.0).astype(float)
+            opt = (osm.values == 0.5).astype(float)
+            Mw = osm.copy(); Mw.iloc[:, :] = ess + w * opt
+            _RP.df_occ_sim = occupation_distance.occ_sim_matrix_by_levels(
+                occ_skills_mat=Mw, osm_version="weighted", sim_metric="cooc",
+                diagonal_zeros=_RP.osim_diag_zeros)
+            print(f"[fix-A] df_occ_sim rebuilt for optional_weight={w} "
+                  f"(feasibility M_oo now reflects the weight)", flush=True)
     # Spawn-safe overrides via env (parent sets them in __main__ BEFORE the Pool spawns, so
     # workers inherit them and re-apply on their own _init). Empty/unset => model default.
     dw = os.environ.get("RSJ_DEST_WEIGHTING")
@@ -305,6 +321,7 @@ if __name__ == "__main__":
     regcs = {"both": None, "true": [True], "false": [False]}[a.regc]
     # Spawn-safe attribute overrides via env (set BEFORE any Pool spawns) + variant suffix so
     # diagnostic runs never collide with the weight-0.5 production pickles.
+    os.environ["RSJ_OPTIONAL_WEIGHT"] = repr(float(a.optional_weight))  # fix-A: rebuild M_oo per weight
     suffix = ""
     if a.dest_weighting:
         os.environ["RSJ_DEST_WEIGHTING"] = a.dest_weighting
