@@ -1,68 +1,89 @@
-"""Task D SI table — does the inward tailored-vs-transferable gap close/hold/reverse with the
-optional-skill weight? Run AFTER the sweep lands (weights 0 and 1.0, shortage, regC).
+"""Task-D (reviewer's question): are optional skills needed AT ALL?
 
-Reads the weight-0.5 production pickles and the _optw0/_optw1 variant pickles, and tabulates,
-for shortage (inward), regC, EU-pooled COEFFY-weighted:
-    reach %  and  skills-to-first-transition
-for {tailored, transferable} x {0.0, 0.5, 1.0}. Prints the tailored-minus-transferable gap
-per weight so the SI can state the trend in one line.
+Compares w=0 (optional skills EXCLUDED) vs w=0.5 (production) **holding the production
+viability rule fixed** (threshold 3.68/10.80). This isolates the weight's effect: the
+re-derived per-weight threshold is NOT used (the green decomposition showed it collapses the
+bar — green reaches in 1.9 vs 19 skills — so a per-weight sweep confounds bar-movement with
+skill-accounting). Fixed-threshold => the only thing that changes is whether optional-skill
+overlap contributes to M_oo.
+
+Framing for the rebuttal/SI:
+  reach(w=0.5) - reach(w=0, fixed thr) = the share of feasible transitions ATTRIBUTABLE TO
+  OPTIONAL-SKILL OVERLAP, holding the production viability rule fixed. (Pre-empts the
+  "of course removing skills lowers overlaps" objection: the bar is unchanged; what falls is
+  exactly the feasibility that optional skills were providing.)
+
+Inputs (local pickles; run after the fixed-threshold w=0 leg lands):
+  production : <flow>/reskill-*_wage-opt_regC_2023/                 (w=0.5)
+  w=0 fixed  : <flow>/reskill-*_wage-opt_regC_2023_optw0_fixthr/    (w=0, threshold 3.68/10.80)
+
+(The per-weight sweep _optw0/_optw1 is demoted to an SI footnote; this script is the headline.)
 
     python revision/taskD_compare.py
 """
 import os, pickle, numpy as np, pandas as pd
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASEDIR = os.path.join(ROOT, "results", "figures", "reskilling_simulation")
-SCEN, LAST, REGC = "shortage", 30, True
-PROG = [("reskill-optimal", "tailored"), ("reskill-coreRanked", "transferable")]
-WEIGHTS = [0.0, 0.5, 1.0]
+B = os.path.join(ROOT, "results", "figures", "reskilling_simulation")
+SIM = {"optimal": "reskill-optimal", "coreness_ranked": "reskill-coreRanked",
+       "green": "reskill-green", "digital": "reskill-digital"}
+LAB = {"optimal": "tailored", "coreness_ranked": "transferable", "green": "green", "digital": "digital"}
+ORDER = ["optimal", "coreness_ranked", "green", "digital"]
+JL = {"at_risk": 20, "shortage": 30}
 
 
-def variant(weight):
-    if abs(weight - 0.5) < 1e-12:
-        return ""
-    return "_optw{:g}".format(weight)
+def load(flow, prog, suffix=""):
+    tag = f"{SIM[prog]}_wage-opt_regC_2023{suffix}"
+    p = os.path.join(B, flow, tag, f"{tag}.pkl")
+    return pickle.load(open(p, "rb"))[flow] if os.path.exists(p) else None
 
 
-def load(sim, weight):
-    tag = f"{sim}_wage-opt_{'regC' if REGC else 'no-regC'}_2023" + variant(weight)
-    p = os.path.join(BASEDIR, SCEN, tag, f"{tag}.pkl")
-    return pickle.load(open(p, "rb"))[SCEN] if os.path.exists(p) else None
+def wmean(v, w):
+    v = np.asarray(v, float); w = np.asarray(w, float); m = ~np.isnan(v) & ~np.isnan(w)
+    return np.average(v[m], weights=w[m]) if m.any() and w[m].sum() > 0 else np.nan
 
 
-def metrics(per):
-    """EU-pooled COEFFY-weighted reach% and mean skills-to-first over reachers."""
-    df = pd.concat(per.values(), ignore_index=True)
+def reach_first(per, last):
+    df = pd.concat(list(per.values()))
     w = df["COEFFY"].to_numpy(float)
-    cols = [f"transition_viable_step_{s}" for s in range(LAST + 1) if f"transition_viable_step_{s}" in df.columns]
+    cols = [f"transition_viable_step_{s}" for s in range(last + 1) if f"transition_viable_step_{s}" in df.columns]
     V = np.nan_to_num(df[cols].astype(float).to_numpy(), nan=0) > 0.5
-    reached = V.any(axis=1)
-    first = V.argmax(axis=1).astype(float); first[~reached] = np.nan
-    reach = w[reached].sum() / w.sum() if w.sum() else np.nan
-    mf = np.average(first[reached], weights=w[reached]) if reached.any() else np.nan
-    return reach * 100, mf
+    reached = V.any(1); fs = V.argmax(1).astype(float); fs[~reached] = np.nan
+    return (w[reached].sum() / w.sum() * 100), wmean(fs[reached], w[reached])
 
 
 def main():
-    print(f"TASK D — inward (shortage, regC) weight sweep: reach% and skills-to-first\n")
-    print(f"{'weight':>6} | {'tailored reach':>14} {'transf reach':>13} | "
-          f"{'tailored→1st':>13} {'transf→1st':>11} {'gap(t−x)':>9}")
-    print("-" * 78)
-    missing = []
-    for wt in WEIGHTS:
-        pt, px = load(PROG[0][0], wt), load(PROG[1][0], wt)
-        if pt is None or px is None:
-            missing.append(wt)
-            print(f"{wt:6} | (pickles not found — run the sweep for this weight)")
-            continue
-        rt, ft = metrics(pt); rx, fx = metrics(px)
-        print(f"{wt:6} | {rt:13.1f}% {rx:12.1f}% | {ft:13.2f} {fx:11.2f} {ft-fx:+9.2f}")
-    print("-" * 78)
-    print("gap(t−x) = tailored minus transferable skills-to-first. Positive = transferable")
-    print("reaches inward sooner (the weight-0.5 finding). Watch whether |gap| shrinks toward 0")
-    print("(closes), stays (holds), or flips sign (reverses) as weight goes 0 -> 1.")
-    if missing:
-        print(f"\n[pending] weights with no pickles yet: {missing} — re-run after the sweep completes.")
+    print("=" * 104)
+    print("TASK-D: feasibility attributable to OPTIONAL-SKILL OVERLAP (production viability rule FIXED 3.68/10.80)")
+    print("        w=0.5 = production (optional incl) ; w=0 = _optw0_fixthr (optional excl, SAME bar)")
+    print("=" * 104)
+    any_missing = False
+    for flow in ["at_risk", "shortage"]:
+        last = JL[flow]
+        print(f"\n--- {flow} (regC, EU-pooled, COEFFY-weighted) ---")
+        print(f"{'program':12} | {'reach w0.5':>10} {'reach w0':>9} {'Δreach pp':>10} {'%attrib':>8} | "
+              f"{'1st w0.5':>9} {'1st w0':>8} {'Δ1st':>7}")
+        for prog in ORDER:
+            prod = load(flow, prog, "")
+            w0 = load(flow, prog, "_optw0_fixthr")
+            if prod is None or w0 is None:
+                any_missing = True
+                miss = "production" if prod is None else "_optw0_fixthr"
+                print(f"{LAB[prog]:12} | MISSING ({miss}) — run the fixed-threshold w=0 leg first")
+                continue
+            r_p, f_p = reach_first(prod, last)
+            r_0, f_0 = reach_first(w0, last)
+            d_reach = r_p - r_0
+            attrib = (d_reach / r_p * 100) if r_p else np.nan
+            print(f"{LAB[prog]:12} | {r_p:9.1f}% {r_0:8.1f}% {d_reach:+9.1f} {attrib:7.1f}% | "
+                  f"{f_p:9.1f} {f_0:8.1f} {(f_0 - f_p):+7.1f}")
+    print("\nReading: Δreach (pp) and %attrib = feasible-transition reach that optional-skill overlap")
+    print("provides, holding the production viability rule fixed. Δreach>0 => optional skills ARE needed")
+    print("(excluding them at the SAME bar makes fewer transitions feasible). Δ1st>0 => excluding optional")
+    print("skills also slows time-to-first-transition. This answers the reviewer directly.")
+    if any_missing:
+        print("\n[!] Missing legs — launch the fixed-threshold w=0 run:")
+        print("    python revision/run_parallel.py --workers 20 --optional-weight 0 \\")
+        print("      --threshold 3.68,10.80 --scenarios at_risk,shortage --regc true --tag-suffix _fixthr")
 
 
 if __name__ == "__main__":

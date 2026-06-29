@@ -296,6 +296,9 @@ if __name__ == "__main__":
     ap.add_argument("--journey-aware", dest="journey_aware", choices=["on", "off"], default=None,
                     help="override rp.journey_aware. 'off' (the pre-correction behaviour) "
                          "self-organises into a _jaoff/ variant path; 'on' is the production default.")
+    ap.add_argument("--tag-suffix", dest="tag_suffix", default="",
+                    help="extra dir-suffix to keep a variant distinct, e.g. '_fixthr' for the "
+                         "fixed-threshold Task-D run (-> ..._optw0_fixthr/, no collision with _optw0).")
     a = ap.parse_args()
     thr = tuple(float(x) for x in a.threshold.split(",")) if a.threshold else None
     scen = a.scenarios.split(",") if a.scenarios else None
@@ -311,6 +314,7 @@ if __name__ == "__main__":
         os.environ["RSJ_JOURNEY_AWARE"] = "1" if a.journey_aware == "on" else "0"
         if a.journey_aware == "off":
             suffix += "_jaoff"
+    suffix += a.tag_suffix   # explicit variant label (e.g. _fixthr), appended last
     if a.test:
         cs = a.countries.split(",") if a.countries else ["SK", "EE", "FI"]
         correctness_test(cs, a.workers, journey=a.journey,
