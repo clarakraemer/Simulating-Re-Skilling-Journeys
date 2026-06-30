@@ -38,6 +38,17 @@ def load(flow, prog, suffix=""):
     return pickle.load(open(p, "rb"))[flow] if os.path.exists(p) else None
 
 
+def meta_thr(flow, prog, suffix=""):
+    """(q_viable, q_highly_viable, optional_weight) from the run's metadata json, or None."""
+    import glob, json
+    tag = f"{SIM[prog]}_wage-opt_regC_2023{suffix}"
+    js = glob.glob(os.path.join(B, flow, tag, "*.json"))
+    if not js:
+        return None
+    m = json.load(open(js[0]))
+    return (m.get("q_viable"), m.get("q_highly_viable"), m.get("optional_weight"))
+
+
 def wmean(v, w):
     v = np.asarray(v, float); w = np.asarray(w, float); m = ~np.isnan(v) & ~np.isnan(w)
     return np.average(v[m], weights=w[m]) if m.any() and w[m].sum() > 0 else np.nan
@@ -70,6 +81,15 @@ def main():
                 any_missing = True
                 miss = "production" if prod is None else "_optw0"
                 print(f"{LAB[prog]:12} | MISSING ({miss}) — run the fixed-threshold w=0 leg first")
+                continue
+            # GUARD: the whole point is FIXED bar. If the _optw0 leg used a different
+            # threshold than production, the comparison conflates weight with threshold
+            # (a STALE / auto-threshold leg). Refuse to interpret it.
+            tp, t0 = meta_thr(flow, prog, ""), meta_thr(flow, prog, "_optw0")
+            if tp and t0 and (abs((t0[0] or 0) - (tp[0] or 0)) > 1e-6 or abs((t0[1] or 0) - (tp[1] or 0)) > 1e-6):
+                any_missing = True
+                print(f"{LAB[prog]:12} | INVALID: _optw0 bar {t0[0]}/{t0[1]} != production {tp[0]}/{tp[1]} "
+                      f"— threshold-confounded (STALE leg); re-run at the fixed bar. SKIPPED.")
                 continue
             r_p, f_p = reach_first(prod, last)
             r_0, f_0 = reach_first(w0, last)
