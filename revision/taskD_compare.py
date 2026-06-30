@@ -15,9 +15,10 @@ Framing for the rebuttal/SI:
 
 Inputs (local pickles; run after the fixed-threshold w=0 leg lands):
   production : <flow>/reskill-*_wage-opt_regC_2023/                 (w=0.5)
-  w=0 fixed  : <flow>/reskill-*_wage-opt_regC_2023_optw0_fixthr3/    (w=0, threshold 3.68/10.80; fix-v2)
+  w=0 fixed  : <flow>/reskill-*_wage-opt_regC_2023_optw0/    (w=0, threshold 3.68/10.80; fix-v2)
 
-(The per-weight sweep _optw0/_optw1 is demoted to an SI footnote; this script is the headline.)
+(_optw0 here is the CORRECTED fix-v2 w=0 run at the FIXED production bar 3.68/10.80 — NOT the old
+inert/threshold-confounded _optw0 sweep, which has been deleted. This script is the headline.)
 
     python revision/taskD_compare.py
 """
@@ -54,7 +55,7 @@ def reach_first(per, last):
 def main():
     print("=" * 104)
     print("TASK-D: feasibility attributable to OPTIONAL-SKILL OVERLAP (production viability rule FIXED 3.68/10.80)")
-    print("        w=0.5 = production (optional incl) ; w=0 = _optw0_fixthr3 (optional excl, SAME bar; fix-v2)")
+    print("        w=0.5 = production (optional incl) ; w=0 = _optw0 (optional excl, SAME bar; fix-v2)")
     print("=" * 104)
     any_missing = False
     for flow in ["at_risk", "shortage"]:
@@ -64,10 +65,10 @@ def main():
               f"{'1st w0.5':>9} {'1st w0':>8} {'Δ1st':>7}")
         for prog in ORDER:
             prod = load(flow, prog, "")
-            w0 = load(flow, prog, "_optw0_fixthr3")
+            w0 = load(flow, prog, "_optw0")
             if prod is None or w0 is None:
                 any_missing = True
-                miss = "production" if prod is None else "_optw0_fixthr3"
+                miss = "production" if prod is None else "_optw0"
                 print(f"{LAB[prog]:12} | MISSING ({miss}) — run the fixed-threshold w=0 leg first")
                 continue
             r_p, f_p = reach_first(prod, last)
@@ -83,7 +84,7 @@ def main():
     if any_missing:
         print("\n[!] Missing legs — launch the fixed-threshold w=0 run:")
         print("    python revision/run_parallel.py --workers 20 --optional-weight 0 \\")
-        print("      --threshold 3.68,10.80 --scenarios at_risk,shortage --regc true --tag-suffix _fixthr3")
+        print("      --threshold 3.68,10.80 --scenarios at_risk,shortage --regc true   # -> natural _optw0 tag")
 
 
 if __name__ == "__main__":
