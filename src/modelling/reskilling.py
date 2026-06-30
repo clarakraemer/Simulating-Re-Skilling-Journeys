@@ -3022,23 +3022,24 @@ class ReskillingPathways:
             # ---------------------------------------------------------------------
             # REGIONAL PLOTS
             # ---------------------------------------------------------------------
+            # SPLIT: two separate figures per step — one transitions map, one income map —
+            # so each can be uploaded independently. ax1/ax3 belong to the transitions figure,
+            # ax2/ax4 to the income figure. The plotting body below is unchanged (it just
+            # draws onto ax1..ax4, which now live on two figures rather than one).
             if not show_map_boxplots:
-                fig, (ax1, ax2) = plt.subplots(
-                    nrows=1,
-                    ncols=2,
-                    figsize=(20, 20),
-                    gridspec_kw={"width_ratios": [0.5, 0.5]},
-                )
+                fig_trans, ax1 = plt.subplots(figsize=(10, 10))
+                fig_inc, ax2 = plt.subplots(figsize=(10, 10))
+                ax3 = ax4 = None
             else:
-                fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(
+                fig_trans, (ax1, ax3) = plt.subplots(
                     nrows=2,
-                    ncols=2,
-                    figsize=(20, 15),
-                    gridspec_kw={
-                        "width_ratios": [0.5, 0.5],
-                        "height_ratios": [0.9, 0.1],
-                        "hspace": 0,
-                    },
+                    figsize=(10, 11),
+                    gridspec_kw={"height_ratios": [0.9, 0.1], "hspace": 0},
+                )
+                fig_inc, (ax2, ax4) = plt.subplots(
+                    nrows=2,
+                    figsize=(10, 11),
+                    gridspec_kw={"height_ratios": [0.9, 0.1], "hspace": 0},
                 )
             vmax_transitions = 6
             bounds_transitions = [0, 1, 2, 3, 4, 5, 6, np.nextafter(vmax_transitions, np.inf)]
@@ -3152,7 +3153,7 @@ class ReskillingPathways:
                 vmin=-vmax_wages,
                 vmax=vmax_wages,
                 legend_kwds={
-                    "label": "$\\Delta$ Annual earnings per worker (€)",
+                    "label": "Avg. annual income change per at-risk worker (€), regional population mean",
                     "fraction": cbar_fraction,
                     "extend": "both",
                 },
@@ -3183,7 +3184,7 @@ class ReskillingPathways:
                 f"earnings_delta_closest_switch_sum_mio_step_{step}"
             ].sum()
             ax2.set_title(
-                "$Total = {:.2f}~M€~(2023)$".format(eu_total_mio)
+                "Regional population mean per at-risk worker  (EU total = {:.2f} M€, 2023)".format(eu_total_mio)
             )
 
             # EU BBOX
@@ -3212,9 +3213,11 @@ class ReskillingPathways:
                     ax=ax4,
                 )
 
-            # layout
+            # layout + save: ONE figure per panel (transitions / income) so they can be
+            # uploaded separately. (Previously a single side-by-side double-map saved once.)
+            _panels = [("transitions", fig_trans), ("income", fig_inc)]
             if show_title:
-                fig.suptitle(
+                _suptitle = (
                     "Country: {country}\n Year: {year}\n Scenario: {scenario}\n Workers: {n_workers}\n N: {n_obs}\n Optimise: {optimise}\n Simulation: {version}\n Regional: {regional_constraint}\n Journey step: {journey_step}".format(
                         version=reskilling_version,
                         scenario=scenario.capitalize(),
@@ -3225,24 +3228,21 @@ class ReskillingPathways:
                         n_obs=n_obs,
                         regional_constraint=regional_constraint,
                         journey_step=step,
-                    ),
-                    fontsize=title_fontsize,
+                    )
                 )
-            fig.tight_layout()
-            fig.subplots_adjust(top=1.4)
+                for _lbl, _fig in _panels:
+                    _fig.suptitle(_suptitle, fontsize=title_fontsize)
 
-            fname = "{}_{}_{}_{}_step_{}.{}".format(
-                "EU", year, "regional", scenario, step, img_ext
-            )
-            plt.savefig(
-                os.path.join(base_dir, dirname, fname),
-                bbox_inches="tight",  # dpi not needed for vector PDFs
-            )
-
-            if not show_plots:
-                plt.cla()
-                fig.clf()
-                plt.close(fig)
+            fname_base = "{}_{}_{}_{}_step_{}".format("EU", year, "regional", scenario, step)
+            for _lbl, _fig in _panels:
+                _fig.tight_layout()
+                _fig.savefig(
+                    os.path.join(base_dir, dirname, "{}_{}.{}".format(fname_base, _lbl, img_ext)),
+                    bbox_inches="tight",  # dpi not needed for vector PDFs
+                )
+                if not show_plots:
+                    _fig.clf()
+                    plt.close(_fig)
 
             # save numbers
             if save_tables:
