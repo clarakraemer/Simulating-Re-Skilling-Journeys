@@ -3215,7 +3215,12 @@ class ReskillingPathways:
 
             # layout + save: ONE figure per panel (transitions / income) so they can be
             # uploaded separately. (Previously a single side-by-side double-map saved once.)
-            _panels = [("transitions", fig_trans), ("income", fig_inc)]
+            # Unified naming scheme: {flow}_{program}_{metric}_{scope}_stepNN.{ext}
+            _PROGRAM = {"reskill-optimal": "tailored", "reskill-coreRanked": "transferable",
+                        "reskill-green": "green", "reskill-digital": "digital"}
+            program = _PROGRAM.get(reskilling_version, reskilling_version)
+            scope = "regC" if regional_constraint else "noRegC"
+            _panels = [("transitions_map", fig_trans), ("income_map_popmean_eur", fig_inc)]
             if show_title:
                 _suptitle = (
                     "Country: {country}\n Year: {year}\n Scenario: {scenario}\n Workers: {n_workers}\n N: {n_obs}\n Optimise: {optimise}\n Simulation: {version}\n Regional: {regional_constraint}\n Journey step: {journey_step}".format(
@@ -3233,11 +3238,11 @@ class ReskillingPathways:
                 for _lbl, _fig in _panels:
                     _fig.suptitle(_suptitle, fontsize=title_fontsize)
 
-            fname_base = "{}_{}_{}_{}_step_{}".format("EU", year, "regional", scenario, step)
             for _lbl, _fig in _panels:
                 _fig.tight_layout()
                 _fig.savefig(
-                    os.path.join(base_dir, dirname, "{}_{}.{}".format(fname_base, _lbl, img_ext)),
+                    os.path.join(base_dir, dirname,
+                                 "{}_{}_{}_{}_step{:02d}.{}".format(scenario, program, _lbl, scope, step, img_ext)),
                     bbox_inches="tight",  # dpi not needed for vector PDFs
                 )
                 if not show_plots:
