@@ -70,10 +70,17 @@ def _init():
     if _RP is None:
         _RP = ReskillingPathways(osm_version="weighted", sim_metric="cooc",
                                  lfs_data=assemble_lfs_data(), year=2023)
-        # FIX (A): simulate_regional's optional_weight is INERT — it never rebuilds the
-        # feasibility M_oo (only names the folder + metadata). So rebuild df_occ_sim here when
-        # the weight != 0.5, using the SAME construction as taskD_threshold (model untouched):
-        # M_os(w) = essential + w*optional ; M_oo = occ_sim_matrix_by_levels(M_os(w)).
+        # FIX (A-v2): simulate_regional's optional_weight is INERT — it never rebuilds the
+        # feasibility matrices (only names the folder + metadata). The model derives feasibility
+        # from TWO matrices, BOTH built in __init__ and never rebuilt thereafter:
+        #   * self.df_occ_sim        -> step-0 BASELINE M_oo (sim_matrix_at_level, upskilling_ids=None)
+        #   * self.occ_skills_mat_3d -> per-STEP M_oo: reskill() copies it each step (line 1039) and
+        #                               recomputes M_oo from it (sim_matrix_at_level w/ upskilling_ids).
+        # fix-A rebuilt only df_occ_sim, so the per-step path stayed at w=0.5 -> shortage (inward,
+        # reaches entirely via per-step reskilling) was IDENTICAL to production (_fixthr2 bug).
+        # fix-v2 rebuilds BOTH. PROVEN (SK shortage, thr 3.68): rebuilding df_occ_sim alone leaves
+        # skills-to-first at 25.92 (== production); adding occ_skills_mat_3d moves it to 27.92.
+        # Same construction as taskD_threshold (model untouched): M_os(w)=essential+w*optional.
         w = float(os.environ.get("RSJ_OPTIONAL_WEIGHT", "0.5"))
         if abs(w - 0.5) > 1e-12:
             osm = _RP.occ_skills_mat
@@ -83,8 +90,10 @@ def _init():
             _RP.df_occ_sim = occupation_distance.occ_sim_matrix_by_levels(
                 occ_skills_mat=Mw, osm_version="weighted", sim_metric="cooc",
                 diagonal_zeros=_RP.osim_diag_zeros)
-            print(f"[fix-A] df_occ_sim rebuilt for optional_weight={w} "
-                  f"(feasibility M_oo now reflects the weight)", flush=True)
+            _RP.occ_skills_mat = Mw                          # base for per-step copies
+            _RP.occ_skills_mat_3d = Mw.groupby(level=3).mean()  # what reskill() copies per step
+            print(f"[fix-v2] df_occ_sim AND occ_skills_mat_3d rebuilt for optional_weight={w} "
+                  f"(baseline AND per-step feasibility M_oo now reflect the weight)", flush=True)
     # Spawn-safe overrides via env (parent sets them in __main__ BEFORE the Pool spawns, so
     # workers inherit them and re-apply on their own _init). Empty/unset => model default.
     dw = os.environ.get("RSJ_DEST_WEIGHTING")
@@ -321,7 +330,7 @@ if __name__ == "__main__":
     regcs = {"both": None, "true": [True], "false": [False]}[a.regc]
     # Spawn-safe attribute overrides via env (set BEFORE any Pool spawns) + variant suffix so
     # diagnostic runs never collide with the weight-0.5 production pickles.
-    os.environ["RSJ_OPTIONAL_WEIGHT"] = repr(float(a.optional_weight))  # fix-A: rebuild M_oo per weight
+    os.environ["RSJ_OPTIONAL_WEIGHT"] = repr(float(a.optional_weight))  # fix-v2: rebuild baseline+per-step M_oo per weight
     suffix = ""
     if a.dest_weighting:
         os.environ["RSJ_DEST_WEIGHTING"] = a.dest_weighting
