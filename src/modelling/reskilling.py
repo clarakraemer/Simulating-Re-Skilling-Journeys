@@ -3213,6 +3213,19 @@ class ReskillingPathways:
                     ax=ax4,
                 )
 
+            # --- legibility for two-column print: enlarge the "Average=" title and the
+            #     colorbar label + tick labels (defaults are unreadable at final size) ---
+            MAP_TITLE_FS, MAP_CBAR_LABEL_FS, MAP_CBAR_TICK_FS = 22, 20, 17
+            for _ax in (ax1, ax2):
+                if _ax is not None and _ax.get_title():
+                    _ax.title.set_fontsize(MAP_TITLE_FS)
+            for _f, _mains in [(fig_trans, {ax1, ax3}), (fig_inc, {ax2, ax4})]:
+                for _cax in _f.axes:               # colorbar axes = figure axes that are not the map/box axes
+                    if _cax not in _mains:
+                        _cax.yaxis.label.set_size(MAP_CBAR_LABEL_FS)
+                        _cax.xaxis.label.set_size(MAP_CBAR_LABEL_FS)
+                        _cax.tick_params(labelsize=MAP_CBAR_TICK_FS)
+
             # layout + save: ONE figure per panel (transitions / income) so they can be
             # uploaded separately. (Previously a single side-by-side double-map saved once.)
             # Unified naming scheme: {flow}_{program}_{metric}_{scope}_stepNN.{ext}
