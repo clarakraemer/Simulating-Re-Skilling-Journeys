@@ -46,6 +46,13 @@ def main():
         rp = None
     else:
         rp = ReskillingPathways(osm_version="weighted", sim_metric="cooc", lfs_data=None, year=2023)
+        # Inject the raw (non-fanned) LFS so the income map can print the CORRECTED € total
+        # (per-worker € x true raw headcount per NUTS), instead of the fan-out-inflated sum.
+        # at_risk uses COEFFY_share_unviable_to_decarbonize (present here); shortage's pool
+        # weight is model-internal, so its map omits the total (handled in the visualiser).
+        from revision.run_sample import assemble_lfs_data
+        rp.lfs_data = assemble_lfs_data()
+        print(f"[regen] injected raw LFS ({len(rp.lfs_data):,} rows) for corrected income totals")
 
     n_pdf = 0
     for scenario in scenarios:

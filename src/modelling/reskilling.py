@@ -3180,12 +3180,29 @@ class ReskillingPathways:
                     axis=1,
                 )
 
-            eu_total_mio = gdf_transition_numbers_by_nuts[
-                f"earnings_delta_closest_switch_sum_mio_step_{step}"
-            ].sum()
-            ax2.set_title(
-                "Regional population mean per at-risk worker  (EU total = {:.2f} M€, 2023)".format(eu_total_mio)
-            )
+            # EU total: the per-cell € sums in the result frame are FAN-OUT-INFLATED
+            # (each at-risk worker-group is replicated across its feasible targets), so their
+            # naive sum overstates the true fiscal total by ~1-2 orders of magnitude — and the
+            # inflation is NOT spatially uniform, so it cannot be undone with one global factor.
+            # The per-worker map value itself is correct (the fan-out cancels in tot/weight).
+            # Rebuild the total the correct way: per-worker € × TRUE raw headcount per region
+            # (Σ pool-weight over the raw LFS, non-fanned), summed over the mapped regions.
+            _true_hc = None
+            if (self.lfs_data is not None) and (norm_factor in getattr(self.lfs_data, "columns", [])):
+                _true_hc = self.lfs_data.groupby("NUTS_ID")[norm_factor].sum()
+            if _true_hc is not None:
+                _pw_by_nuts = gdf_transition_numbers_by_nuts.set_index("NUTS_ID")[per_worker_col]
+                eu_total_mio = float(
+                    (_pw_by_nuts * _true_hc.reindex(_pw_by_nuts.index)).sum(skipna=True)
+                ) / 1e6
+                ax2.set_title(
+                    "Regional population mean per at-risk worker  (total, mapped regions = {:.0f} M€, 2023)".format(eu_total_mio)
+                )
+            else:
+                # true (non-fanned) pool headcount unavailable here -> omit the total rather
+                # than print the fan-out-inflated one. (Applies to plot-only regen of scenarios
+                # whose pool weight is model-internal, e.g. shortage's COEFFY_share_shortage.)
+                ax2.set_title("Regional population mean per at-risk worker")
 
             # EU BBOX
             for ax in [ax1, ax2]:
