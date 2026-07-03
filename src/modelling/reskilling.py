@@ -3112,6 +3112,11 @@ class ReskillingPathways:
                             'LV']
             tot_col = f"earnings_delta_closest_switch_sum_step_{step}"  # totals in €
             norm_factor = self.transition_pool_weights[scenario]  # e.g. COEFFY_share_unviable_to_decarbonize
+            # scenario-appropriate worker noun (the income map is drawn for both flows; the
+            # inward/shortage flow is NOT "at-risk", so relabel accordingly)
+            _worker_noun = {"at_risk": "at-risk worker",
+                            "shortage": "worker (inward flow)",
+                            "high_carbon": "high-carbon worker"}.get(scenario, "worker")
 
             gdf_transition_numbers_by_nuts.loc[
                 gdf_transition_numbers_by_nuts["CNTR_CODE"].isin(cntr_missing),
@@ -3153,7 +3158,7 @@ class ReskillingPathways:
                 vmin=-vmax_wages,
                 vmax=vmax_wages,
                 legend_kwds={
-                    "label": "Avg. annual income change per at-risk worker (€), regional population mean",
+                    "label": f"Avg. annual income change per {_worker_noun} (€), regional population mean",
                     "fraction": cbar_fraction,
                     "extend": "both",
                 },
@@ -3196,13 +3201,13 @@ class ReskillingPathways:
                     (_pw_by_nuts * _true_hc.reindex(_pw_by_nuts.index)).sum(skipna=True)
                 ) / 1e6
                 ax2.set_title(
-                    "Regional population mean per at-risk worker  (total, mapped regions = {:.0f} M€, 2023)".format(eu_total_mio)
+                    "Regional population mean per {} (total, mapped regions = {:.0f} M€, 2023)".format(_worker_noun, eu_total_mio)
                 )
             else:
                 # true (non-fanned) pool headcount unavailable here -> omit the total rather
                 # than print the fan-out-inflated one. (Applies to plot-only regen of scenarios
                 # whose pool weight is model-internal, e.g. shortage's COEFFY_share_shortage.)
-                ax2.set_title("Regional population mean per at-risk worker")
+                ax2.set_title("Regional population mean per {}".format(_worker_noun))
 
             # EU BBOX
             for ax in [ax1, ax2]:
