@@ -56,7 +56,10 @@ Sectors: manufacturing (C) 40%, construction (F) 28% (73% success), professional
 
 ## Inward (shortage), green reach 22.8%
 
-Even narrower — only **4 origin occupations** ever switch; two hold 80%.
+Even narrower — but this is a **property of the inward pool, not of green**: the whole
+shortage pool contains only **4 origin ISCO-3 occupations**, and *every* program
+(green, transferable 99.6%, tailored 99.0%) draws its switchers from the same 4. Two
+dominate (95% of green switchers).
 
 | origin occupation (ISCO-3) | % of switchers | success rate | green-skill share |
 |---|---:|---:|---:|
