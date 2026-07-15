@@ -27,3 +27,6 @@ build/
 
 # Internal agent instructions (not for review)
 CLAUDE.md
+
+# Revision run logs (transient)
+revision/*.log
