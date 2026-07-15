@@ -1,7 +1,0 @@
-Collecting scipy
-  Downloading scipy-1.15.2-cp311-cp311-macosx_14_0_arm64.whl.metadata (61 kB)
-Requirement already satisfied: numpy<2.5,>=1.23.5 in ./.venv/lib/python3.11/site-packages (from scipy) (2.2.3)
-Downloading scipy-1.15.2-cp311-cp311-macosx_14_0_arm64.whl (22.4 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 22.4/22.4 MB 27.8 MB/s eta 0:00:00
-Installing collected packages: scipy
-Successfully installed scipy-1.15.2
