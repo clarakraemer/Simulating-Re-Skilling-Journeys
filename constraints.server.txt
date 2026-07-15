@@ -1,0 +1,3 @@
+setuptools<75
+wheel<0.45
+Cython==0.29.36
